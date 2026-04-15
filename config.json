@@ -1,0 +1,205 @@
+{
+  "project": {
+    "name": "Akıllı Sınıf Sistemi",
+    "version": "1.0.0",
+    "description": "IoT tabanlı akıllı sınıf otomasyon sistemi"
+  },
+  "mqtt": {
+    "broker": "localhost",
+    "port": 1883,
+    "username": "esp32",
+    "password": "akilli123",
+    "base_topic": "akilli-sinif",
+    "keepalive": 60,
+    "qos": {
+      "sensor": 0,
+      "control": 1,
+      "status": 1
+    }
+  },
+  "influxdb": {
+    "url": "http://localhost:8086",
+    "org": "AkilliSinif",
+    "bucket": "sinif_data",
+    "retention_days": 180
+  },
+  "services": {
+    "node_red": {
+      "url": "http://localhost:1880",
+      "enabled": true
+    },
+    "grafana": {
+      "url": "http://localhost:3000",
+      "enabled": true
+    },
+    "ai_server": {
+      "url": "http://localhost:5000",
+      "enabled": true,
+      "model": "yolov8n.pt"
+    }
+  },
+  "classrooms": [
+    {
+      "id": "sinif-1",
+      "name": "Sınıf 1 - Test (Gerçek Donanım)",
+      "description": "Gerçek sensörler ve aktüatörler ile donatılmış test sınıfı",
+      "mock_data": false,
+      "devices": {
+        "esp32_plc": {
+          "enabled": true,
+          "ip": "auto",
+          "sensors": ["temperature", "humidity", "light", "air_quality", "pir", "window"],
+          "actuators": ["led", "fan"]
+        },
+        "esp32_cam": {
+          "enabled": true,
+          "ip": "auto",
+          "resolution": "VGA",
+          "capture_interval_active": 10,
+          "capture_interval_idle": 300
+        },
+        "display": {
+          "enabled": true,
+          "type": "ST7735",
+          "size": "1.44inch",
+          "rotation": 0
+        }
+      },
+      "capacity": 30
+    },
+    {
+      "id": "sinif-2",
+      "name": "Sınıf 2 - Simülasyon",
+      "description": "Sahte veri üreten simülasyon sınıfı",
+      "mock_data": true,
+      "devices": {
+        "esp32_plc": {
+          "enabled": true,
+          "ip": "auto",
+          "sensors": ["temperature", "humidity", "light", "air_quality", "pir", "window"],
+          "actuators": ["led", "fan"]
+        },
+        "esp32_cam": {
+          "enabled": false
+        },
+        "display": {
+          "enabled": false
+        }
+      },
+      "capacity": 25
+    }
+  ],
+  "sensors": {
+    "temperature": {
+      "unit": "C",
+      "min": 15,
+      "max": 35,
+      "comfort_min": 20,
+      "comfort_max": 26,
+      "read_interval_ms": 5000
+    },
+    "humidity": {
+      "unit": "%",
+      "min": 20,
+      "max": 90,
+      "comfort_min": 40,
+      "comfort_max": 60,
+      "read_interval_ms": 5000
+    },
+    "light": {
+      "unit": "lux",
+      "min": 0,
+      "max": 1000,
+      "threshold_dark": 100,
+      "threshold_bright": 500,
+      "read_interval_ms": 2000
+    },
+    "air_quality": {
+      "unit": "ppm",
+      "good": 100,
+      "moderate": 200,
+      "poor": 300,
+      "hazardous": 500,
+      "read_interval_ms": 10000
+    },
+    "pir": {
+      "timeout_seconds": 300,
+      "debounce_ms": 500
+    },
+    "window": {
+      "debounce_ms": 100,
+      "ac_warning": true,
+      "warning_message": "Pencere açıkken klima çalıştırılamaz!"
+    }
+  },
+  "actuators": {
+    "led": {
+      "pwm_frequency": 5000,
+      "pwm_resolution": 8,
+      "min_brightness": 0,
+      "max_brightness": 100,
+      "default_brightness": 80
+    },
+    "fan": {
+      "pwm_frequency": 25000,
+      "pwm_resolution": 8,
+      "min_speed": 0,
+      "max_speed": 100,
+      "default_speed": 50
+    }
+  },
+  "automation": {
+    "enabled": true,
+    "light_control": {
+      "enabled": true,
+      "auto_on_threshold": 200,
+      "auto_off_threshold": 400,
+      "require_presence": true
+    },
+    "fan_control": {
+      "enabled": true,
+      "temp_threshold_on": 26,
+      "temp_threshold_off": 24,
+      "air_quality_threshold": 200
+    },
+    "ac_control": {
+      "enabled": true,
+      "check_window": true,
+      "block_if_window_open": true,
+      "warning_message": "Pencere açıkken klima çalıştırılamaz! Lütfen önce pencereyi kapatın."
+    },
+    "presence_timeout_seconds": 300,
+    "schedule_enabled": true
+  },
+  "camera": {
+    "resolution": {
+      "width": 640,
+      "height": 480
+    },
+    "quality": 12,
+    "format": "JPEG"
+  },
+  "ai": {
+    "model": "yolov8n",
+    "confidence_threshold": 0.5,
+    "classes_to_detect": ["person"],
+    "trash_detection": true
+  },
+  "wifi": {
+    "ssid": "",
+    "password": "",
+    "hostname_prefix": "akilli-sinif",
+    "reconnect_interval_ms": 5000,
+    "max_reconnect_attempts": 10
+  },
+  "ota": {
+    "enabled": true,
+    "check_interval_hours": 24
+  },
+  "debug": {
+    "serial_enabled": true,
+    "serial_baud": 115200,
+    "verbose_mqtt": false,
+    "verbose_sensors": false
+  }
+}

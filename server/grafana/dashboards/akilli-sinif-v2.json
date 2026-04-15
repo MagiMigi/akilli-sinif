@@ -1,0 +1,971 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "panels": [],
+      "title": "📊 Gerçek Zamanlı Sensör Verileri",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 35,
+          "min": 15,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 20 },
+              { "color": "yellow", "value": 26 },
+              { "color": "red", "value": 30 }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 1 },
+      "id": 2,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"temperature\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🌡️ Sıcaklık",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "green", "value": 40 },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 70 }
+            ]
+          },
+          "unit": "humidity"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 1 },
+      "id": 3,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"humidity\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "💧 Nem",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 1000,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-blue", "value": null },
+              { "color": "blue", "value": 100 },
+              { "color": "green", "value": 300 },
+              { "color": "yellow", "value": 700 }
+            ]
+          },
+          "unit": "lux"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 1 },
+      "id": 4,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "☀️ Işık Seviyesi",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 500,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "orange", "value": 200 },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "unit": "ppm"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 1 },
+      "id": 5,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🌬️ Hava Kalitesi",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "dark-green", "index": 0, "text": "Hareket Yok" }, "1": { "color": "green", "index": 1, "text": "Hareket Var" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-green", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 16, "y": 1 },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"pir\")\n  |> filter(fn: (r) => r._field == \"detected\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🚶 Hareket",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "KAPALI" }, "1": { "color": "orange", "index": 1, "text": "AÇIK" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 20, "y": 1 },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"window\")\n  |> filter(fn: (r) => r._field == \"open\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🪟 Pencere",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+      "id": 17,
+      "panels": [],
+      "title": "📷 Kamera & Kişi Sayımı",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 50,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "blue", "value": 1 },
+              { "color": "yellow", "value": 20 },
+              { "color": "orange", "value": 35 },
+              { "color": "red", "value": 45 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "id": 18,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"camera\")\n  |> filter(fn: (r) => r._field == \"person_count\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "👥 Sınıftaki Kişi Sayısı",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "from": 0, "result": { "color": "dark-red", "index": 0, "text": "BOŞ" }, "to": 0 }, "type": "range" },
+            { "options": { "from": 1, "result": { "color": "green", "index": 1, "text": "DOLU" }, "to": 100 }, "type": "range" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "id": 19,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"camera\")\n  |> filter(fn: (r) => r._field == \"person_count\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🏫 Sınıf Durumu",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "always",
+            "spanNulls": false
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camera\")\n  |> filter(fn: (r) => r._field == \"person_count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "refId": "A"
+        }
+      ],
+      "title": "👥 Kişi Sayısı Trendi",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 8,
+      "panels": [],
+      "title": "📈 Zaman Serisi",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "mappings": [],
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 9,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"temperature\" or r._measurement == \"humidity\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "refId": "A"
+        }
+      ],
+      "title": "🌡️ Sıcaklık & Nem Trendi",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "mappings": [],
+          "unit": "lux"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 10,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "refId": "A"
+        }
+      ],
+      "title": "☀️ Işık Seviyesi Trendi",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "orange", "value": 200 },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "unit": "ppm"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "refId": "A"
+        }
+      ],
+      "title": "🌬️ Hava Kalitesi Trendi",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-green", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "id": 12,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pir\")\n  |> filter(fn: (r) => r._field == \"detected\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)",
+          "refId": "A"
+        }
+      ],
+      "title": "🚶 Hareket Geçmişi",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "id": 21,
+      "panels": [],
+      "title": "🤖 Otomasyon & Aktüatörler",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "dark-yellow", "index": 0, "text": "KAPALI" }, "1": { "color": "yellow", "index": 1, "text": "AÇIK" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-yellow", "value": null },
+              { "color": "yellow", "value": 1 }
+            ]
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 32 },
+      "id": 22,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"led_status\")\n  |> filter(fn: (r) => r._field == \"brightness\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "💡 LED Durumu",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "dark-blue", "index": 0, "text": "KAPALI" }, "1": { "color": "blue", "index": 1, "text": "AÇIK" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-blue", "value": null },
+              { "color": "blue", "value": 1 }
+            ]
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 32 },
+      "id": 23,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"fan_status\")\n  |> filter(fn: (r) => r._field == \"speed\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🌀 Fan Durumu",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "auto_light": { "color": "green", "index": 0, "text": "Işık Oto" }, "auto_temp": { "color": "green", "index": 1, "text": "Sıcaklık Oto" }, "auto_empty": { "color": "orange", "index": 2, "text": "Sınıf Boş" }, "manual": { "color": "blue", "index": 3, "text": "Manuel" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 32 },
+      "id": 24,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"automation_event\")\n  |> filter(fn: (r) => r._field == \"reason\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🤖 Son Otomasyon",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "id": 25,
+      "panels": [],
+      "title": "⚠️ Alarmlar & Uyarılar",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "from": 0, "result": { "color": "green", "index": 0, "text": "Normal" }, "to": 25.99 }, "type": "range" },
+            { "options": { "from": 26, "result": { "color": "yellow", "index": 1, "text": "Sıcak" }, "to": 29.99 }, "type": "range" },
+            { "options": { "from": 30, "result": { "color": "red", "index": 2, "text": "ÇOK SICAK!" }, "to": 100 }, "type": "range" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 26 },
+              { "color": "red", "value": 30 }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 37 },
+      "id": 26,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"temperature\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🌡️ Sıcaklık Alarmı",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "from": 0, "result": { "color": "green", "index": 0, "text": "Temiz" }, "to": 99 }, "type": "range" },
+            { "options": { "from": 100, "result": { "color": "yellow", "index": 1, "text": "Orta" }, "to": 199 }, "type": "range" },
+            { "options": { "from": 200, "result": { "color": "orange", "index": 2, "text": "Kötü" }, "to": 299 }, "type": "range" },
+            { "options": { "from": 300, "result": { "color": "red", "index": 3, "text": "TEHLİKE!" }, "to": 1000 }, "type": "range" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "orange", "value": 200 },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "unit": "ppm"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 37 },
+      "id": 27,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🌬️ Hava Kalitesi Alarmı",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "from": 0, "result": { "color": "orange", "index": 0, "text": "Karanlık - LED Gerekli" }, "to": 299 }, "type": "range" },
+            { "options": { "from": 300, "result": { "color": "green", "index": 1, "text": "Yeterli Işık" }, "to": 1000 }, "type": "range" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "orange", "value": null },
+              { "color": "green", "value": 300 }
+            ]
+          },
+          "unit": "lux"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 37 },
+      "id": 28,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "☀️ Işık Durumu",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "Pencere Kapalı" }, "1": { "color": "red", "index": 1, "text": "PENCERE AÇIK!" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 37 },
+      "id": 29,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"window\")\n  |> filter(fn: (r) => r._field == \"open\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🪟 Pencere Güvenliği",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 13,
+      "panels": [],
+      "title": "📡 Cihaz Durumu",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 0, "text": "OFFLINE" }, "1": { "color": "green", "index": 1, "text": "ONLINE" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 42 },
+      "id": 14,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -1m)\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r._field == \"online\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🔌 ESP32 Durumu",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": -80 },
+              { "color": "yellow", "value": -70 },
+              { "color": "green", "value": -60 }
+            ]
+          },
+          "unit": "dBm"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 42 },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r._field == \"rssi\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "📶 WiFi Sinyal",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 42 },
+      "id": 16,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r._field == \"uptime\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "⏱️ Uptime",
+      "type": "stat"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["akilli-sinif", "iot"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Akıllı Sınıf Sistemi",
+  "uid": "akilli-sinif-v2",
+  "version": 1
+}

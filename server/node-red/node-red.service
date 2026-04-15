@@ -1,0 +1,15 @@
+[Unit]
+Description=Node-RED
+After=network.target
+
+[Service]
+Type=simple
+User=magimigi
+WorkingDirectory=/home/magimigi
+Environment="NODE_RED_OPTIONS=-s /home/magimigi/.node-red/settings.js"
+ExecStart=/home/magimigi/.local/share/mise/installs/node/25.1.0/bin/node-red
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

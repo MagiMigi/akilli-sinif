@@ -1,0 +1,128 @@
+name: Build & Release Firmware
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ESP32-PLC
+            artifact: firmware-plc
+            fqbn: esp32:esp32:esp32
+            source: firmware/esp32-plc/src/main/
+            libraries: >-
+              PubSubClient
+              ArduinoJson
+              "DHT sensor library"
+              TFT_eSPI
+              WiFiManager
+
+          - name: ESP32-CAM
+            artifact: firmware-cam
+            fqbn: esp32:esp32:esp32wrover:PartitionScheme=min_spiffs
+            source: firmware/esp32-cam/src/main/
+            libraries: >-
+              PubSubClient
+              ArduinoJson
+              WiFiManager
+
+          - name: ESP32-Simulator
+            artifact: firmware-sim
+            fqbn: esp32:esp32:esp32
+            source: firmware/esp32-simulator/src/main/
+            libraries: >-
+              PubSubClient
+              ArduinoJson
+              WiFiManager
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 board support
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+
+      - name: Install libraries
+        run: arduino-cli lib install ${{ matrix.libraries }}
+
+      - name: Update version.h from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          MAJOR=$(echo "$VER" | cut -d. -f1)
+          MINOR=$(echo "$VER" | cut -d. -f2)
+          PATCH=$(echo "$VER" | cut -d. -f3)
+
+          cat > firmware/version.h <<EOF
+          #ifndef VERSION_H
+          #define VERSION_H
+
+          #define FIRMWARE_VERSION_MAJOR $MAJOR
+          #define FIRMWARE_VERSION_MINOR $MINOR
+          #define FIRMWARE_VERSION_PATCH $PATCH
+          #define FIRMWARE_VERSION "$VER"
+
+          #define BUILD_DATE __DATE__
+          #define BUILD_TIME __TIME__
+
+          #endif
+          EOF
+
+      - name: Compile
+        run: |
+          arduino-cli compile \
+            --fqbn ${{ matrix.fqbn }} \
+            --output-dir ./build \
+            ${{ matrix.source }}
+
+      - name: Rename binary
+        run: mv ./build/main.ino.bin ./${{ matrix.artifact }}-${GITHUB_REF_NAME}.bin
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}-*.bin
+          retention-days: 30
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Collect binaries
+        run: |
+          mkdir -p release
+          mv firmware-plc/*.bin release/
+          mv firmware-cam/*.bin release/
+          mv firmware-sim/*.bin release/
+          ls -lh release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Firmware ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: release/*.bin

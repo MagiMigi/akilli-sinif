@@ -1,0 +1,391 @@
+[
+    {
+        "id": "akilli-sinif-flow",
+        "type": "tab",
+        "label": "Akıllı Sınıf Sistemi",
+        "disabled": false,
+        "info": "ESP32'den gelen sensör verilerini InfluxDB'ye kaydeder.",
+        "env": []
+    },
+    {
+        "id": "mqtt-broker-config",
+        "type": "mqtt-broker",
+        "name": "Mosquitto Broker",
+        "broker": "localhost",
+        "port": "1883",
+        "clientid": "nodered-client",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": "",
+        "credentials": {
+            "user": "nodered",
+            "password": "nodered123"
+        }
+    },
+    {
+        "id": "influxdb-config",
+        "type": "influxdb",
+        "hostname": "localhost",
+        "port": "8086",
+        "protocol": "http",
+        "database": "",
+        "name": "InfluxDB v2",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "http://localhost:8086",
+        "rejectUnauthorized": false
+    },
+    {
+        "id": "comment-header",
+        "type": "comment",
+        "z": "akilli-sinif-flow",
+        "name": "🏫 Akıllı Sınıf - MQTT → InfluxDB",
+        "info": "",
+        "x": 170,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "mqtt-all-sensors",
+        "type": "mqtt in",
+        "z": "akilli-sinif-flow",
+        "name": "Tüm Sensörler",
+        "topic": "akilli-sinif/+/sensors/+",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 130,
+        "y": 120,
+        "wires": [
+            [
+                "process-sensor",
+                "debug-sensor"
+            ]
+        ]
+    },
+    {
+        "id": "debug-sensor",
+        "type": "debug",
+        "z": "akilli-sinif-flow",
+        "name": "Debug Sensör",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 350,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "process-sensor",
+        "type": "function",
+        "z": "akilli-sinif-flow",
+        "name": "InfluxDB Format",
+        "func": "// Topic: akilli-sinif/sinif-1/sensors/temperature\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];  // sinif-1\nvar sensorType = parts[3];   // temperature, humidity, camera, etc.\n\n// Sensör tipine göre field adını belirle\nvar fieldName = \"value\";\nvar fieldValue = msg.payload.value;\n\n// Boolean sensörler için özel işlem\nif (sensorType === \"pir\") {\n    fieldName = \"detected\";\n    fieldValue = msg.payload.detected ? 1 : 0;\n} else if (sensorType === \"window\") {\n    fieldName = \"open\";\n    fieldValue = msg.payload.open ? 1 : 0;\n} else if (sensorType === \"camera\") {\n    fieldName = \"person_count\";\n    fieldValue = msg.payload.person_count || 0;\n}\n\n// InfluxDB v2 için mesajı hazırla\n// Format: msg.payload = [{field1: val1, field2: val2}, {tag1: val1}]\nmsg.measurement = sensorType;\nvar fields = {};\nfields[fieldName] = fieldValue;\nvar tags = {\n    classroom: classroomId,\n    sensor: sensorType\n};\nmsg.payload = [fields, tags];\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 120,
+        "wires": [
+            [
+                "influxdb-write",
+                "debug-influx"
+            ]
+        ]
+    },
+    {
+        "id": "debug-influx",
+        "type": "debug",
+        "z": "akilli-sinif-flow",
+        "name": "Debug InfluxDB",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "influxdb-write",
+        "type": "influxdb out",
+        "z": "akilli-sinif-flow",
+        "influxdb": "influxdb-config",
+        "name": "InfluxDB Write",
+        "measurement": "",
+        "precision": "ms",
+        "retentionPolicy": "",
+        "database": "",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "AkilliSinif",
+        "bucket": "sinif_data",
+        "x": 560,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "mqtt-status",
+        "type": "mqtt in",
+        "z": "akilli-sinif-flow",
+        "name": "Cihaz Durumu",
+        "topic": "akilli-sinif/+/status/connection",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 130,
+        "y": 200,
+        "wires": [
+            [
+                "process-status",
+                "debug-status"
+            ]
+        ]
+    },
+    {
+        "id": "debug-status",
+        "type": "debug",
+        "z": "akilli-sinif-flow",
+        "name": "Debug Status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload.status",
+        "targetType": "msg",
+        "statusVal": "payload.status",
+        "statusType": "auto",
+        "x": 350,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "process-status",
+        "type": "function",
+        "z": "akilli-sinif-flow",
+        "name": "Status Format",
+        "func": "var parts = msg.topic.split('/');\nvar classroomId = parts[1];\n\nmsg.measurement = \"device_status\";\nmsg.payload = {\n    classroom: classroomId,\n    device: msg.payload.device || \"unknown\",\n    online: msg.payload.status === \"online\" ? 1 : 0,\n    rssi: msg.payload.rssi || 0,\n    uptime: msg.payload.uptime || 0\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 200,
+        "wires": [
+            [
+                "influxdb-write"
+            ]
+        ]
+    },
+    {
+        "id": "comment-control",
+        "type": "comment",
+        "z": "akilli-sinif-flow",
+        "name": "🎮 Manuel Kontrol",
+        "info": "",
+        "x": 130,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "inject-led-on",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "LED %100",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"brightness\":100}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 320,
+        "wires": [
+            [
+                "mqtt-led-control"
+            ]
+        ]
+    },
+    {
+        "id": "inject-led-50",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "LED %50",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"brightness\":50}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 360,
+        "wires": [
+            [
+                "mqtt-led-control"
+            ]
+        ]
+    },
+    {
+        "id": "inject-led-off",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "LED Kapat",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 400,
+        "wires": [
+            [
+                "mqtt-led-control"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-led-control",
+        "type": "mqtt out",
+        "z": "akilli-sinif-flow",
+        "name": "LED Control",
+        "topic": "akilli-sinif/sinif-1/control/led",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt-broker-config",
+        "x": 330,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "inject-fan-on",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "Fan %100",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"speed\":100}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 460,
+        "wires": [
+            [
+                "mqtt-fan-control"
+            ]
+        ]
+    },
+    {
+        "id": "inject-fan-off",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "Fan Kapat",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 500,
+        "wires": [
+            [
+                "mqtt-fan-control"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-fan-control",
+        "type": "mqtt out",
+        "z": "akilli-sinif-flow",
+        "name": "Fan Control",
+        "topic": "akilli-sinif/sinif-1/control/fan",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt-broker-config",
+        "x": 330,
+        "y": 480,
+        "wires": []
+    }
+]
