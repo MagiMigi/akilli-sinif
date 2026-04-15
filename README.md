@@ -194,10 +194,31 @@ GitHub Actions otomatik olarak 3 firmware'i derler ve [GitHub Release](https://g
 
 1. http://localhost:1880 → **OTA Yönetimi** tabı
 2. "Manuel Kontrol" → son sürüm GitHub'dan çekilir
-3. Hedef cihaza tıkla (`sinif-1 PLC Güncelle`, `sinif-1 CAM Güncelle`, vb.)
+3. Hedef cihaza tıkla:
+   - `sinif-1 PLC Güncelle` / `sinif-1 CAM Güncelle` — tek cihaz
+   - `TÜM PLC'leri Güncelle` / `TÜM CAM'leri Güncelle` — broadcast, tüm sınıflar aynı anda
 4. İlerleme ve sonuç alt panelde görünür
 
+> OTA sırasında WiFi/MQTT ayarları korunur, portal açılmaz.
+
 MQTT topic detayları: **[docs/mqtt-topics.md](docs/mqtt-topics.md)**
+
+---
+
+## Config Sıfırlama
+
+WiFi şifresi veya MQTT broker IP'si değiştiğinde cihazı portal moduna almak için:
+
+**Fiziksel:** ESP32 açılırken **GPIO0 (BOOT)** butonunu 5 saniye basılı tut.
+
+**Uzaktan (Node-RED):**
+
+1. http://localhost:1880 → **Config Sıfırlama** tabı
+2. İlgili sınıfı seç (`sinif-1 Sıfırla`, `sinif-2 Sıfırla`) veya tümünü sıfırla
+3. ESP32 ekranda "Uzaktan Reset!" gösterir, yeniden başlar
+4. `Akilli-Sinif-Setup` WiFi ağına bağlan → `192.168.4.1` → yeni ayarları gir
+
+> Sıfırlama sonrası broker IP boşsa cihaz doğrudan portal moduna girer, kayıtlı WiFi'ya bağlanmaya çalışmaz.
 
 ---
 
@@ -237,8 +258,9 @@ Sonraki güncellemeler OTA ile kablosuz yapılır.
 | Durum | Ekran |
 |-------|-------|
 | Normal | Yeşil başlık, MQTT yeşil daire |
-| Uyarı | Sarı arka plan + "!" ikonu |
-| Tehlike | Kırmızı yanıp sönen ekran + uyarı mesajı |
+| Sıcaklık yüksek (28–32°C) | Sarı arka plan + "!" ikonu |
+| Sıcaklık kritik (>32°C) | Kırmızı yanıp sönen ekran + uyarı mesajı |
+| Hava kalitesi kötü (PPM yüksek) | Sadece PPM değeri kırmızı renkte gösterilir |
 | MQTT kopuk | Sağ üst kırmızı daire |
 
 ---
