@@ -52,7 +52,7 @@ ESP32-CAM ──┘                    └── YOLOv8 (kişi sayma)
 |---------|------|--------|
 | ESP32 DevKit V1 | 2 | PLC + simülatör |
 | ESP32-CAM | 1 | Kamera modülü (opsiyonel) |
-| DHT22 | 1 | Sıcaklık/nem |
+| DHT11 | 1 | Sicaklik/nem |
 | LDR | 1 | Işık seviyesi |
 | MQ-135 | 1 | Hava kalitesi |
 | PIR | 1 | Hareket algılama |
@@ -62,7 +62,7 @@ ESP32-CAM ──┘                    └── YOLOv8 (kişi sayma)
 | 12V Adaptör + XL4015 | 1+1 | Güç: 12V → 5V |
 | IRLZ44N MOSFET | 2 | LED + fan sürücü |
 
-Devre şemaları: [`hardware/schematics/`](hardware/schematics/)
+Devre semalari ve pin haritalari: **[docs/donanim.md](docs/donanim.md)**
 
 ### Sunucu (Laptop/PC)
 
@@ -88,7 +88,7 @@ cd akilli-sinif
 
 ### 2. Sunucu servislerini kur ve başlat
 
-Detaylı kurulum (Mosquitto, InfluxDB, Node-RED, Grafana, YOLOv8): **[docs/setup-guide.md](docs/setup-guide.md)**
+Detayli kurulum (Mosquitto, InfluxDB, Node-RED, Grafana, YOLOv8): **[docs/setup-guide.md](docs/setup-guide.md)**
 
 Tüm servisler kurulduktan sonra tek komutla başlat:
 
@@ -201,7 +201,7 @@ GitHub Actions otomatik olarak 3 firmware'i derler ve [GitHub Release](https://g
 
 > OTA sırasında WiFi/MQTT ayarları korunur, portal açılmaz.
 
-MQTT topic detayları: **[docs/mqtt-topics.md](docs/mqtt-topics.md)**
+MQTT topic detaylari: **[docs/mqtt-topics.md](docs/mqtt-topics.md)**
 
 ---
 
@@ -251,8 +251,8 @@ Sonraki güncellemeler OTA ile kablosuz yapılır.
 
 | Bileşen | Pin | Tür |
 |---------|-----|-----|
-| LED Strip | GPIO16 | PWM |
-| DC Fan | GPIO17 | PWM |
+| LED Strip | GPIO13 | PWM |
+| DC Fan | GPIO12 | PWM |
 ### TFT Ekran Durum Göstergeleri
 
 | Durum | Ekran |
@@ -282,11 +282,11 @@ akilli-sinif/
 │   ├── influxdb/                # Veritabanı config
 │   ├── grafana/                 # Dashboard tanımları
 │   └── ai-processing/           # YOLOv8 kişi sayma servisi
-├── hardware/schematics/         # Devre şemaları
-├── mobile-app/                  # React Native (geliştirmede)
 ├── docs/
-│   ├── setup-guide.md           # Detaylı kurulum kılavuzu
-│   └── mqtt-topics.md           # MQTT topic referansı
+│   ├── setup-guide.md           # Detayli kurulum kilavuzu
+│   ├── mqtt-topics.md           # MQTT topic referansi
+│   ├── firmware.md              # Firmware mimarisi ve OTA
+│   └── donanim.md               # Pin haritalari ve devre semalari
 └── akilli-start.sh              # Tüm servisleri başlat
 ```
 
@@ -302,7 +302,7 @@ akilli-sinif/
 | Grafana'da veri yok | InfluxDB datasource token'ını kontrol et |
 | OTA başarısız | Node-RED'de GitHub URL'nin doğru olduğunu kontrol et |
 
-Detaylı sorun giderme: **[docs/setup-guide.md#sorun-giderme](docs/setup-guide.md#sorun-giderme)**
+Detayli sorun giderme: **[docs/setup-guide.md#sorun-giderme](docs/setup-guide.md#sorun-giderme)**
 
 ---
 

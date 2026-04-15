@@ -1,17 +1,17 @@
-# Kurulum Kılavuzu
+# Kurulum Kilavuzu
 
-Bu kılavuz, Akıllı Sınıf Sistemi sunucusunu sıfırdan kurmayı anlatır.
+Bu kilavuz, Akilli Sinif Sistemi sunucusunu sifirdan kurmayı anlatir.
 
-## İçindekiler
+## Icindekiler
 
 - [Sistem Gereksinimleri](#sistem-gereksinimleri)
 - [1. Mosquitto MQTT Broker](#1-mosquitto-mqtt-broker)
 - [2. InfluxDB](#2-influxdb)
 - [3. Node-RED](#3-node-red)
 - [4. Grafana](#4-grafana)
-- [5. YOLOv8 (AI Kişi Sayma)](#5-yolov8-ai-kişi-sayma)
-- [6. ESP32 Geliştirme Ortamı](#6-esp32-geliştirme-ortamı)
-- [7. Kurulumu Doğrula](#7-kurulumu-doğrula)
+- [5. YOLOv8 AI Kisi Sayma](#5-yolov8-ai-kisi-sayma)
+- [6. ESP32 Gelistirme Ortami](#6-esp32-gelistirme-ortami)
+- [7. Kurulumu Dogrula](#7-kurulumu-dogrula)
 - [Sorun Giderme](#sorun-giderme)
 
 ---
@@ -25,7 +25,7 @@ Bu kılavuz, Akıllı Sınıf Sistemi sunucusunu sıfırdan kurmayı anlatır.
 | Disk | 20 GB |
 | Node.js | 18+ |
 | Python | 3.11+ |
-| Arduino IDE | 2.x (firmware yükleme için) |
+| Arduino IDE | 2.x (firmware yukleme icin) |
 
 ---
 
@@ -47,25 +47,46 @@ sudo apt install mosquitto mosquitto-clients
 ```
 </details>
 
-**Konfigürasyon:**
+### Konfigurasyon
+
+Repo icindeki config dosyasini kopyala:
 
 ```bash
 sudo cp server/mosquitto/mosquitto.conf /etc/mosquitto/mosquitto.conf
 ```
 
-**MQTT kullanıcıları oluştur:**
+`mosquitto.conf` icerigi:
+
+| Ayar | Deger | Aciklama |
+|------|-------|----------|
+| `listener` | 1883 | Standart MQTT portu |
+| `allow_anonymous` | false | Kimlik dogrulama zorunlu |
+| `password_file` | /etc/mosquitto/passwd | Sifre dosyasi |
+| `persistence` | true | Mesajlar diskte saklanir |
+| `persistence_location` | /var/lib/mosquitto/ | Saklama dizini |
+| `message_size_limit` | 1048576 | Maks mesaj boyutu (1 MB) |
+| `autosave_interval` | 1800 | Otomatik kayit araligi (30 dk) |
+
+### MQTT Kullanicilarini Olustur
+
+Sistemde iki MQTT kullanicisi vardir:
+
+| Kullanici | Sifre | Kullanan |
+|-----------|-------|----------|
+| `esp32` | `akilli123` | ESP32 cihazlari (PLC, CAM, Simulator) |
+| `nodered` | `nodered123` | Node-RED ve YOLO sunucusu |
 
 ```bash
-# esp32 kullanıcısı (cihazlar için)
+# esp32 kullanicisi
 sudo mosquitto_passwd -c /etc/mosquitto/passwd esp32
-# Şifre gir: akilli123
+# Sifre: akilli123
 
-# nodered kullanıcısı (Node-RED için)
+# nodered kullanicisi
 sudo mosquitto_passwd /etc/mosquitto/passwd nodered
-# Şifre gir: nodered123
+# Sifre: nodered123
 ```
 
-**Log dizini ve servis:**
+### Log Dizini ve Servis
 
 ```bash
 sudo mkdir -p /var/log/mosquitto
@@ -73,17 +94,17 @@ sudo chown mosquitto:mosquitto /var/log/mosquitto
 sudo systemctl enable --now mosquitto
 ```
 
-**Test:**
+### Test
 
 ```bash
-# Terminal 1
+# Terminal 1 — dinle
 mosquitto_sub -h localhost -t "test" -u esp32 -P akilli123
 
-# Terminal 2
+# Terminal 2 — gonder
 mosquitto_pub -h localhost -t "test" -m "Merhaba" -u esp32 -P akilli123
 ```
 
-Terminal 1'de "Merhaba" görmelisin.
+Terminal 1'de "Merhaba" gormalisin.
 
 ---
 
@@ -100,65 +121,110 @@ sudo pacman -S influxdb influx-cli
 <details>
 <summary>Ubuntu / Debian</summary>
 
-InfluxDB 2.x için [resmi kurulum kılavuzunu](https://docs.influxdata.com/influxdb/v2/install/) takip et.
+[Resmi kurulum kilavuzu](https://docs.influxdata.com/influxdb/v2/install/)
 </details>
 
-**Servisi başlat:**
+### Servisi Baslat
 
 ```bash
 sudo systemctl enable --now influxdb
 ```
 
-**Web arayüzünden ilk kurulum:**
+### Ilk Kurulum (Web Arayuzu)
 
 1. http://localhost:8086 adresine git
-2. Aşağıdaki bilgileri gir:
+2. Asagidaki bilgileri gir:
 
-   | Alan | Değer |
+   | Alan | Deger |
    |------|-------|
    | Username | admin |
    | Password | akilli123456 |
    | Organization | AkilliSinif |
    | Bucket | sinif_data |
 
-3. Oluşturulan API token'ı not al — Grafana ve Node-RED'de kullanacaksın
+3. Olusan API token'i not al — Grafana ve Node-RED'de kullanacaksin
 
-**Retention policy (opsiyonel):**
+### Retention Policy (opsiyonel)
 
 ```bash
-influx bucket update --id <BUCKET_ID> --retention 4320h   # 180 gün
+influx bucket update --id <BUCKET_ID> --retention 4320h   # 180 gun
 ```
 
 ---
 
 ## 3. Node-RED
 
-**Kurulum:**
+### Kurulum
 
 ```bash
 npm install -g node-red
 ```
 
-**Eklentileri kur:**
+### Eklentileri Kur
 
 ```bash
 cd ~/.node-red
 npm install node-red-contrib-influxdb node-red-dashboard node-red-contrib-image-output
 ```
 
-**Systemd servisi oluştur:**
+### Systemd Servisi
+
+Repo icinde hazir servis dosyasi var:
 
 ```bash
 sudo cp server/node-red/node-red.service /etc/systemd/system/
+```
+
+Servis dosyasi icerigi (`server/node-red/node-red.service`):
+
+```ini
+[Unit]
+Description=Node-RED
+After=network.target
+
+[Service]
+Type=simple
+User=magimigi
+WorkingDirectory=/home/magimigi
+ExecStart=/home/magimigi/.local/share/mise/installs/node/25.1.0/bin/node-red
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> **Not:** `ExecStart` satirindaki node-red yolunu kendi sistemine gore guncelle. `which node-red` komutuyla bulabilirsin.
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now node-red
 ```
 
-**Flow'u içe aktar:**
+### Flow'u Iceri Aktar
 
 1. http://localhost:1880 adresine git
-2. Sağ üst menü → **Import** → `server/node-red/flows-v3.json`
+2. Sag ust menu > **Import** > `server/node-red/flows-v3.json` dosyasini sec
 3. **Deploy**
+
+### MQTT Broker Yapilandirmasi
+
+1. Herhangi bir MQTT node'una cift tikla (mor renkli)
+2. **Server** yanindaki kalem ikonuna tikla
+3. **Security** sekmesi:
+   - Username: `nodered`
+   - Password: `nodered123`
+4. **Update** > **Done** > **Deploy**
+
+### InfluxDB Yapilandirmasi
+
+1. Herhangi bir InfluxDB out node'una cift tikla
+2. **Server** yanindaki kalem ikonuna tikla
+3. Ayarlar:
+   - Version: `2.0`
+   - URL: `http://localhost:8086`
+   - Token: *(InfluxDB'den aldigin API token)*
+4. **Update** > **Done** > **Deploy**
 
 ---
 
@@ -180,67 +246,135 @@ sudo apt install grafana
 ```
 </details>
 
-**Servisi başlat:**
+### Servisi Baslat
 
 ```bash
 sudo systemctl enable --now grafana
 ```
 
-**İlk kurulum:**
+### Ilk Kurulum
 
-1. http://localhost:3000 → giriş: `admin` / `admin`
-2. Yeni şifre olarak `akilli123456` gir
+1. http://localhost:3000 > giris: `admin` / `admin`
+2. Yeni sifre: `akilli123456`
 
-**InfluxDB datasource ekle:**
+### InfluxDB Datasource Ekle
 
-1. **Configuration → Data Sources → Add data source → InfluxDB**
+1. **Configuration > Data Sources > Add data source > InfluxDB**
 2. Ayarlar:
 
-   | Alan | Değer |
+   | Alan | Deger |
    |------|-------|
    | Query Language | Flux |
    | URL | http://localhost:8086 |
    | Organization | AkilliSinif |
-   | Token | *(InfluxDB'den aldığın token)* |
+   | Token | *(InfluxDB'den aldigin token)* |
    | Default Bucket | sinif_data |
 
-3. **Save & Test**
+3. **Save & Test** — "Data source is working" mesaji gelmeli
+
+### Dashboard Import
+
+1. Sol menu > **Dashboards** > **Import**
+2. **Upload JSON file** > `server/grafana/dashboards/akilli-sinif-v2.json`
+3. **Import**
 
 ---
 
-## 5. YOLOv8 (AI Kişi Sayma)
+## 5. YOLOv8 AI Kisi Sayma
+
+### Python Ortamini Kur
 
 ```bash
 cd server/ai-processing
-
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**`.env` dosyasını oluştur:**
+`requirements.txt` icindeki ana bagimliliklar:
+
+| Paket | Versiyon | Amac |
+|-------|----------|------|
+| Flask | 3.1.3 | REST API sunucusu |
+| ultralytics | 8.4.23 | YOLOv8 modeli |
+| paho-mqtt | 2.1.0 | MQTT baglantisi |
+| opencv-python | 4.13.0.92 | Goruntu isleme |
+| torch | 2.10.0+cpu | PyTorch (CPU) |
+| python-dotenv | >=1.0.0 | .env dosyasi okuma |
+
+### .env Dosyasini Olustur
 
 ```bash
 cp .env.example .env
-# .env dosyasını düzenle: API_KEY, MQTT kullanıcı/şifre ayarla
 ```
 
-**Test:**
+`.env` dosyasi icerigi:
+
+```env
+# MQTT Ayarlari
+MQTT_BROKER=localhost
+MQTT_PORT=1883
+MQTT_USER=nodered
+MQTT_PASSWORD=nodered123
+
+# YOLO Sunucu Auth (API anahtari)
+API_KEY=ultra-mega-secret-key
+```
+
+| Degisken | Varsayilan | Aciklama |
+|----------|-----------|----------|
+| `MQTT_BROKER` | localhost | MQTT broker adresi |
+| `MQTT_PORT` | 1883 | MQTT portu |
+| `MQTT_USER` | nodered | MQTT kullanici adi |
+| `MQTT_PASSWORD` | (bos) | MQTT sifresi |
+| `API_KEY` | (bos) | API auth anahtari. Bos birakılırsa auth devre disi kalir (gelistirme modu) |
+
+### YOLO Sunucusu Detaylari
+
+| Ozellik | Deger |
+|---------|-------|
+| Port | 5000 |
+| Model | yolov8n.pt (Nano — en hizli) |
+| Confidence threshold | 0.45 |
+| Tespit sinifi | person (COCO class 0) |
+| Foto kayit | `captured_images/` dizinine |
+| Maks foto | 200 adet, 7 gunden eski olanlar silinir |
+
+### API Endpoint'leri
+
+| Endpoint | Method | Auth | Aciklama |
+|----------|--------|------|----------|
+| `GET /` | GET | Yok | Sunucu durumu |
+| `POST /analyze` | POST | X-API-Key | ESP32-CAM'den JPEG al, analiz et |
+| `GET /test` | GET | X-API-Key | Webcam'den test foto cek |
+| `GET /count/<sinif_id>` | GET | Yok | Son kisi sayisini dondur |
+
+`/analyze` endpoint'i:
+- Header: `Content-Type: image/jpeg`, `X-Classroom-ID: sinif-1`, `X-API-Key: <anahtar>`
+- Body: Ham JPEG verisi
+- Yanit: `{"success": true, "person_count": 5, "detections": [...], "classroom_id": "sinif-1"}`
+- Sonuc otomatik olarak MQTT topic'ine yayinlanir: `akilli-sinif/<sinif_id>/sensors/camera`
+
+### Test
 
 ```bash
+source venv/bin/activate
 python -c "from ultralytics import YOLO; print('YOLOv8 OK')"
 ```
 
-**Servisi başlat:**
+### Servisi Baslat
 
 ```bash
+cd server/ai-processing
+source venv/bin/activate
 python yolo_server.py
-# http://localhost:5000 adresinde çalışır
 ```
+
+YOLO modeli kurulu degilse mock mod otomatik aktif olur (rastgele kisi sayisi uretir).
 
 ---
 
-## 6. ESP32 Geliştirme Ortamı
+## 6. ESP32 Gelistirme Ortami
 
 ### Arduino IDE
 
@@ -253,30 +387,48 @@ yay -S arduino-ide-bin
 </details>
 
 <details>
-<summary>Diğer dağıtımlar</summary>
+<summary>Diger dagitimlar</summary>
 
 [Arduino IDE 2.x](https://www.arduino.cc/en/software) indirip kur.
 </details>
 
-### ESP32 Board Desteği
+### ESP32 Board Destegi
 
-1. **File → Preferences**
-2. Additional Board Manager URLs alanına ekle:
+1. **File > Preferences**
+2. Additional Board Manager URLs:
    ```
    https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
    ```
-3. **Tools → Board → Boards Manager** → `esp32` ara → **Install**
+3. **Tools > Board > Boards Manager** > `esp32` ara > **Install**
 
-### Gerekli Kütüphaneler
+### Gerekli Kutuphaneler
 
-**Library Manager'dan kur:**
-- PubSubClient
-- ArduinoJson
-- WiFiManager
-- TFT_eSPI (PLC için)
-- DHT sensor library (PLC için)
+Library Manager'dan kur (**Tools > Manage Libraries**):
 
-### Seri Port İzni
+| Kutuphane | Kullanan Firmware |
+|-----------|-------------------|
+| PubSubClient | PLC, CAM, Simulator |
+| ArduinoJson | PLC, CAM, Simulator |
+| WiFiManager (tzapu) | PLC, CAM, Simulator |
+| TFT_eSPI | PLC |
+| DHT sensor library | PLC |
+
+### TFT_eSPI Pin Yapilandirmasi
+
+PLC firmware'i ST7735 1.44" TFT ekran kullaniyor. `TFT_eSPI` kutuphanesi pinleri `User_Setup.h` dosyasindan okur.
+
+Arduino kutuphaneler dizininde `TFT_eSPI/User_Setup.h` dosyasini ac ve su pinleri ayarla:
+
+| TFT Pini | ESP32 GPIO |
+|----------|------------|
+| TFT_CS | 15 |
+| TFT_DC (A0/RS) | 33 |
+| TFT_RST | 32 |
+| TFT_MOSI (SDA) | 23 |
+| TFT_SCLK (SCK) | 18 |
+| TFT_BL | 3.3V (veya GPIO ile kontrol) |
+
+### Seri Port Izni
 
 ```bash
 # Arch
@@ -286,82 +438,145 @@ sudo usermod -a -G uucp $USER
 sudo usermod -a -G dialout $USER
 ```
 
-> Gruba eklendikten sonra **logout/login** yapman gerekir.
+> Gruba eklendikten sonra **logout/login** yap.
 
 ---
 
-## 7. Kurulumu Doğrula
+## 7. Kurulumu Dogrula
 
-### Servislerin durumunu kontrol et
+### Servislerin Durumu
 
 ```bash
 sudo systemctl status mosquitto influxdb node-red grafana
 ```
 
-### MQTT üzerinden uçtan uca test
+### MQTT Uctan Uca Test
 
 ```bash
-# Terminal 1 — tüm sensör verilerini dinle
+# Terminal 1 — tum mesajlari dinle
 mosquitto_sub -h localhost -t "akilli-sinif/#" -u esp32 -P akilli123 -v
 
-# Terminal 2 — test verisi gönder
+# Terminal 2 — test verisi gonder
 mosquitto_pub -h localhost \
-  -t "akilli-sinif/sinif-1/sensor/temperature" \
+  -t "akilli-sinif/sinif-1/sensors/temperature" \
   -m '{"value": 23.5, "unit": "C"}' \
   -u esp32 -P akilli123
 ```
 
-Terminal 1'de mesajı görüyorsan, InfluxDB'de de yazılıp yazılmadığını kontrol et:
-1. http://localhost:8086 → **Data Explorer**
-2. Bucket: `sinif_data` → filtrele
+Terminal 1'de mesaji goruyorsan MQTT calisiyor.
 
-### Grafana'da veriyi gör
+### InfluxDB Kontrolu
+
+1. http://localhost:8086 > **Data Explorer**
+2. Bucket: `sinif_data` > filtrele
+3. Node-RED uzerinden gelen veriler burada gorunmeli
+
+### Grafana Kontrolu
 
 1. http://localhost:3000
-2. İlgili dashboard'a git — test verisinin grafikte göründüğünü doğrula
+2. Dashboard'a git — verilerin grafikte gorunmesi gerekir
+
+### Tum Servisleri Tek Komutla Baslat
+
+```bash
+./akilli-start.sh
+```
+
+Bu script sirasiyla kontrol eder ve baslatir:
+1. Mosquitto
+2. InfluxDB
+3. Grafana
+4. Node-RED
+5. YOLO Sunucusu
 
 ---
 
 ## Sorun Giderme
 
-### Mosquitto başlamıyor
+### Mosquitto Baslamiyor
 
 ```bash
-# Detaylı log
+# Detayli log
 journalctl -u mosquitto -e
 
-# Manuel çalıştırma (debug)
+# Manuel calistirma (debug)
 mosquitto -c /etc/mosquitto/mosquitto.conf -v
 ```
 
-### ESP32 seri port erişim hatası
+### ESP32 Seri Port Erisim Hatasi
 
 ```bash
-# Geçici çözüm
+# Gecici cozum
 sudo chmod 666 /dev/ttyUSB0
 
-# Kalıcı çözüm
+# Kalici cozum
 sudo usermod -a -G uucp $USER   # Arch
 sudo usermod -a -G dialout $USER # Ubuntu
 # Logout/login yap
 ```
 
-### Node-RED eklentileri görünmüyor
+### MQTT Baglanti Hatasi
+
+```bash
+# Mosquitto calisiyor mu?
+systemctl status mosquitto
+
+# Manuel test
+mosquitto_pub -h localhost -u esp32 -P akilli123 -t "test" -m "hello"
+```
+
+### InfluxDB'de Veri Yok
+
+1. MQTT mesajlarinin geldigini dogrula (`mosquitto_sub` ile)
+2. Node-RED'de InfluxDB node'unun bagli oldugundan emin ol (yesil nokta = bagli)
+3. InfluxDB token'inin Node-RED'de dogru oldugunu kontrol et
+4. Bucket adinin `sinif_data` oldugunu dogrula
+
+### Grafana'da Veri Gorunmuyor
+
+1. **Configuration > Data Sources > InfluxDB > Save & Test** — "Data source is working" gelmeli
+2. Token veya bucket adi yanlissa duzelt
+3. Zaman araligini kontrol et (sag ustte "Last 5 minutes" dene)
+
+### Node-RED Eklentileri Gorunmuyor
 
 ```bash
 cd ~/.node-red
-npm install <paket-adı>
+npm install <paket-adi>
 sudo systemctl restart node-red
 ```
 
-### InfluxDB'de veri yok
+### YOLO Sunucusu Calismiyor
 
-1. MQTT mesajlarının geldiğini doğrula (`mosquitto_sub` ile)
-2. Node-RED'de InfluxDB node'unun bağlı olduğunu kontrol et (yeşil nokta = bağlı)
-3. InfluxDB token'ının Node-RED'de doğru girildiğini kontrol et
+```bash
+cd server/ai-processing
+source venv/bin/activate
+python yolo_server.py
+```
 
-### Grafana'da veri görünmüyor
+Model dosyasi (`yolov8n.pt`) yoksa otomatik indirilir. Internet baglantisi gerekir.
 
-1. **Configuration → Data Sources → InfluxDB → Save & Test** — "Data source is working" mesajı gelmeli
-2. Token veya bucket adı yanlışsa düzelt
-3. Zaman aralığını kontrol et (sağ üstte "Last 1 hour" yerine "Last 5 minutes" dene)
+### ESP32 WiFi'ya Baglanmiyor
+
+- 2.4 GHz WiFi kullan (5 GHz desteklenmez)
+- GPIO0 (BOOT) butonuna 5 sn bas > portal acar > WiFi bilgilerini tekrar gir
+- Modem/router'i yeniden baslat
+
+### OTA Guncelleme Basarisiz
+
+- Node-RED'de GitHub release URL'sinin dogru oldugunu kontrol et
+- ESP32'nin internet erisimi oldugunu dogrula
+- `akilli-sinif/<sinif_id>/status/ota` topic'ini dinleyerek hata mesajini gor
+
+---
+
+## Baglanti Ozeti
+
+| Servis | Adres | Kullanici | Sifre |
+|--------|-------|-----------|-------|
+| Node-RED | http://localhost:1880 | — | — |
+| Grafana | http://localhost:3000 | admin | akilli123456 |
+| InfluxDB | http://localhost:8086 | admin | akilli123456 |
+| MQTT (ESP32) | localhost:1883 | esp32 | akilli123 |
+| MQTT (Node-RED) | localhost:1883 | nodered | nodered123 |
+| YOLO API | http://localhost:5000 | — | X-API-Key header |
