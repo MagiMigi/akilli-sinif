@@ -201,18 +201,6 @@ String buildTopic(const char* type, const char* name) {
 // ============================================
 
 void setupDisplay() {
-  // Soft-reset (OTA) sonrası SPI peripheral belirsiz state'de kalıyor;
-  // SPI.end() ile tamamen söküp tft.init() içinde yeniden kurulmasını zorluyoruz.
-  SPI.end();
-  delay(20);
-
-  // TFT_RST (GPIO 32) pulse — ST7735 controller'ı sıfırla
-  pinMode(32, OUTPUT);
-  digitalWrite(32, LOW);
-  delay(150);
-  digitalWrite(32, HIGH);
-  delay(150);
-
   tft.init();
   tft.setRotation(1);  // Yatay mod (128x128 -> yatay)
   tft.fillScreen(COLOR_BG);
@@ -1240,12 +1228,6 @@ void setup() {
   // Seri port baslatma
   Serial.begin(115200);
   delay(500);
-
-  // OTA soft-reset sonrası GPIO 13/12 float HIGH olabiliyor → LED/FAN parlamasını önle
-  pinMode(PIN_LED, OUTPUT);
-  digitalWrite(PIN_LED, LOW);
-  pinMode(PIN_FAN, OUTPUT);
-  digitalWrite(PIN_FAN, LOW);
 
   // ── ADIM 0: Config reset butonunu kontrol et (TFT oncesi, erken yakalamak icin)
   // (TFT henuz hazir degil, sadece serial log)

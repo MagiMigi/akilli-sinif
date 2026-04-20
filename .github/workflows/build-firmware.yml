@@ -64,6 +64,13 @@ jobs:
       - name: Install libraries
         run: arduino-cli lib install ${{ matrix.libraries }}
 
+      - name: Apply custom TFT_eSPI User_Setup.h (PLC only)
+        if: matrix.name == 'ESP32-PLC'
+        run: |
+          LIB_DIR="$HOME/Arduino/libraries/TFT_eSPI"
+          cp firmware/esp32-plc/User_Setup.h "$LIB_DIR/User_Setup.h"
+          grep -E '^#define (ST7735_DRIVER|TFT_RST|TFT_CS)' "$LIB_DIR/User_Setup.h"
+
       - name: Read firmware version
         id: ver
         run: echo "v=$(cat ${{ matrix.version_file }} | tr -d '[:space:]')" >> $GITHUB_OUTPUT
