@@ -18,6 +18,7 @@ jobs:
             artifact: firmware-plc
             fqbn: esp32:esp32:esp32
             source: firmware/esp32-plc/src/main/
+            version_file: firmware/esp32-plc/VERSION
             libraries: >-
               PubSubClient
               ArduinoJson
@@ -29,6 +30,7 @@ jobs:
             artifact: firmware-cam
             fqbn: esp32:esp32:esp32wrover:PartitionScheme=min_spiffs
             source: firmware/esp32-cam/src/main/
+            version_file: firmware/esp32-cam/VERSION
             libraries: >-
               PubSubClient
               ArduinoJson
@@ -38,6 +40,7 @@ jobs:
             artifact: firmware-sim
             fqbn: esp32:esp32:esp32
             source: firmware/esp32-simulator/src/main/
+            version_file: firmware/esp32-simulator/VERSION
             libraries: >-
               PubSubClient
               ArduinoJson
@@ -61,10 +64,13 @@ jobs:
       - name: Install libraries
         run: arduino-cli lib install ${{ matrix.libraries }}
 
-      - name: Update version.h from tag
+      - name: Read firmware version
+        id: ver
+        run: echo "v=$(cat ${{ matrix.version_file }} | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+
+      - name: Update version.h
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          VER="${TAG#v}"
+          VER="${{ steps.ver.outputs.v }}"
           MAJOR=$(echo "$VER" | cut -d. -f1)
           MINOR=$(echo "$VER" | cut -d. -f2)
           PATCH=$(echo "$VER" | cut -d. -f3)
@@ -92,7 +98,7 @@ jobs:
             ${{ matrix.source }}
 
       - name: Rename binary
-        run: mv ./build/main.ino.bin ./${{ matrix.artifact }}-${GITHUB_REF_NAME}.bin
+        run: mv ./build/main.ino.bin ./${{ matrix.artifact }}-v${{ steps.ver.outputs.v }}.bin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
