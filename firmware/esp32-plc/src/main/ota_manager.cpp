@@ -93,7 +93,7 @@ bool OTAManager::performUpdate(const String& url, const String& version) {
     publishStatus("updating", 0, version);
 
     WiFiClientSecure client;
-    client.setCACert(GITHUB_ROOT_CA);
+    client.setInsecure();  // GitHub CDN sertifika zinciri değişkenliği nedeniyle doğrulama atlanıyor
     client.setTimeout(30);  // 30 saniye bağlantı timeout
 
     HTTPClient http;
