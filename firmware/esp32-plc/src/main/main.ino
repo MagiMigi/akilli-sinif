@@ -201,6 +201,15 @@ String buildTopic(const char* type, const char* name) {
 // ============================================
 
 void setupDisplay() {
+  // OTA soft-reset sonrası ST7735 controller belirsiz durumda kalabiliyor.
+  // USB flasha göre fark: USB → EN pin toggle (donanımsal reset), OTA → ESP.restart() (yazılımsal).
+  // TFT_RST (GPIO 32) elle LOW→HIGH pulse ile controller sıfırlanıyor.
+  pinMode(32, OUTPUT);
+  digitalWrite(32, LOW);
+  delay(120);
+  digitalWrite(32, HIGH);
+  delay(120);
+
   tft.init();
   tft.setRotation(1);  // Yatay mod (128x128 -> yatay)
   tft.fillScreen(COLOR_BG);
@@ -1228,6 +1237,12 @@ void setup() {
   // Seri port baslatma
   Serial.begin(115200);
   delay(500);
+
+  // OTA soft-reset sonrası GPIO 13/12 float HIGH olabiliyor → LED/FAN parlamasını önle
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
+  pinMode(PIN_FAN, OUTPUT);
+  digitalWrite(PIN_FAN, LOW);
 
   // ── ADIM 0: Config reset butonunu kontrol et (TFT oncesi, erken yakalamak icin)
   // (TFT henuz hazir degil, sadece serial log)
