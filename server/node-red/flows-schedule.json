@@ -1,0 +1,115 @@
+[
+  {
+    "id": "tab-schedule",
+    "type": "tab",
+    "label": "Ders Programi",
+    "disabled": false,
+    "info": "Schedule publisher — reads server/node-red/data/schedule.json ve ESP32 TFT menu icin MQTT'ye yayinlar. Ayrica manuel duyuru gonderir."
+  },
+  {
+    "id": "mqtt-broker-local",
+    "type": "mqtt-broker",
+    "name": "Local Mosquitto",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "node-red-schedule",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "credentials": {
+      "user": "esp32",
+      "password": "akilli123"
+    }
+  },
+  {
+    "id": "inject-schedule-tick",
+    "type": "inject",
+    "z": "tab-schedule",
+    "name": "Her dakika",
+    "props": [{"p": "payload"}],
+    "repeat": "60",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "5",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 80,
+    "wires": [["read-schedule"]]
+  },
+  {
+    "id": "read-schedule",
+    "type": "file in",
+    "z": "tab-schedule",
+    "name": "schedule.json oku",
+    "filename": "/data/schedule.json",
+    "format": "utf8",
+    "chunk": false,
+    "sendError": false,
+    "encoding": "none",
+    "allProps": false,
+    "x": 340,
+    "y": 80,
+    "wires": [["parse-and-publish"]]
+  },
+  {
+    "id": "parse-and-publish",
+    "type": "function",
+    "z": "tab-schedule",
+    "name": "current/today/week uret",
+    "func": "const data = JSON.parse(msg.payload);\nconst classroomId = data.classroom_id || 'sinif-1';\nconst base = `akilli-sinif/${classroomId}`;\nconst now = new Date();\nconst dayMap = ['Paz','Pzt','Sal','Car','Per','Cum','Cmt'];\nconst todayName = dayMap[now.getDay()];\nconst today = (data.week || []).find(d => d.day === todayName);\nconst slots = today ? today.slots : [];\n\nconst nowMins = now.getHours()*60 + now.getMinutes();\nconst toMins = s => parseInt(s.substring(0,2))*60 + parseInt(s.substring(3,5));\n\nlet current = null;\nfor (const s of slots) {\n  if (toMins(s.start) <= nowMins && nowMins < toMins(s.end)) { current = s; break; }\n}\n\nconst teacherName = code => (data.teachers && data.teachers[code]) ? data.teachers[code] : code;\nconst subjectName = code => (data.subjects && data.subjects[code]) ? data.subjects[code] : code;\n\nconst currentMsg = {\n  topic: `${base}/schedule/current`,\n  payload: JSON.stringify(current ? {\n    subject: subjectName(current.code),\n    teacher: teacherName(current.teacher),\n    start: current.start,\n    end: current.end\n  } : {}),\n  retain: true\n};\n\nconst todayMsg = {\n  topic: `${base}/schedule/today`,\n  payload: JSON.stringify(slots.map(s => ({\n    code: s.code,\n    subject: subjectName(s.code),\n    teacher: teacherName(s.teacher),\n    start: s.start,\n    end: s.end\n  }))),\n  retain: true\n};\n\nconst weekMsg = {\n  topic: `${base}/schedule/week`,\n  payload: JSON.stringify((data.week || []).map(d => ({\n    day: d.day,\n    slots: d.slots.map(s => ({ code: s.code, teacher: s.teacher }))\n  }))),\n  retain: true\n};\n\nreturn [[currentMsg, todayMsg, weekMsg]];",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 580,
+    "y": 80,
+    "wires": [["mqtt-out-schedule"]]
+  },
+  {
+    "id": "mqtt-out-schedule",
+    "type": "mqtt out",
+    "z": "tab-schedule",
+    "name": "MQTT yayinla (retain)",
+    "topic": "",
+    "qos": "1",
+    "retain": "true",
+    "broker": "mqtt-broker-local",
+    "x": 820,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "inject-announce",
+    "type": "inject",
+    "z": "tab-schedule",
+    "name": "Duyuru (elle tetikle)",
+    "props": [
+      {"p": "payload"},
+      {"p": "topic", "vt": "str"}
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "topic": "akilli-sinif/sinif-1/announcements",
+    "payload": "{\"title\":\"Deneme Duyurusu\",\"body\":\"Tum ogrenciler 14:00'te salonda toplansin.\",\"severity\":\"info\"}",
+    "payloadType": "str",
+    "x": 150,
+    "y": 200,
+    "wires": [["mqtt-out-announce"]]
+  },
+  {
+    "id": "mqtt-out-announce",
+    "type": "mqtt out",
+    "z": "tab-schedule",
+    "name": "Duyuru yayinla",
+    "topic": "",
+    "qos": "1",
+    "retain": "true",
+    "broker": "mqtt-broker-local",
+    "x": 400,
+    "y": 200,
+    "wires": []
+  }
+]

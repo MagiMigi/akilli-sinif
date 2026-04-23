@@ -13,11 +13,11 @@
 #define VERSION_H
 
 #define FIRMWARE_VERSION_MAJOR 1
-#define FIRMWARE_VERSION_MINOR 0
+#define FIRMWARE_VERSION_MINOR 2
 #define FIRMWARE_VERSION_PATCH 0
 
 // Tam versiyon string'i — MQTT status mesajlarında kullanılır
-#define FIRMWARE_VERSION "1.0.0"
+#define FIRMWARE_VERSION "1.2.0"
 
 // GitHub Actions tarafından doldurulur (release tag'ı)
 // Manuel build'de __DATE__ ve __TIME__ kullanılır

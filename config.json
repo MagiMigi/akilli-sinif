@@ -1,7 +1,7 @@
 {
   "project": {
     "name": "Akıllı Sınıf Sistemi",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "IoT tabanlı akıllı sınıf otomasyon sistemi"
   },
   "mqtt": {
@@ -201,5 +201,20 @@
     "serial_baud": 115200,
     "verbose_mqtt": false,
     "verbose_sensors": false
+  },
+  "display": {
+    "auto_rotate_ms": 6000,
+    "pause_on_long_press_ms": 3000,
+    "buttons": {
+      "next_pin": 25,
+      "prev_pin": 14
+    },
+    "pages": [
+      "sensors",
+      "clock",
+      "now",
+      "week",
+      "announce"
+    ]
   }
 }

@@ -1,0 +1,80 @@
+{
+  "classroom_id": "sinif-1",
+  "teachers": {
+    "AY": "Pr. Dr. Ali Yilmaz",
+    "MD": "Dr. Mehmet Demir",
+    "ZK": "Ogretmen Zeynep Kaya",
+    "EO": "Pr. Emre Ozturk",
+    "FS": "Dr. Fatma Sahin"
+  },
+  "subjects": {
+    "MAT": "Matematik",
+    "FIZ": "Fizik",
+    "KIM": "Kimya",
+    "BIY": "Biyoloji",
+    "TAR": "Tarih",
+    "COG": "Cografya",
+    "ING": "Ingilizce",
+    "TUR": "Turkce",
+    "EDB": "Edebiyat",
+    "BED": "Beden",
+    "MUZ": "Muzik"
+  },
+  "week": [
+    {
+      "day": "Pzt",
+      "slots": [
+        {"start": "09:00", "end": "09:40", "code": "MAT", "teacher": "AY"},
+        {"start": "09:50", "end": "10:30", "code": "MAT", "teacher": "AY"},
+        {"start": "10:40", "end": "11:20", "code": "TUR", "teacher": "ZK"},
+        {"start": "11:30", "end": "12:10", "code": "FIZ", "teacher": "MD"},
+        {"start": "13:00", "end": "13:40", "code": "ING", "teacher": "EO"},
+        {"start": "13:50", "end": "14:30", "code": "TAR", "teacher": "FS"}
+      ]
+    },
+    {
+      "day": "Sal",
+      "slots": [
+        {"start": "09:00", "end": "09:40", "code": "FIZ", "teacher": "MD"},
+        {"start": "09:50", "end": "10:30", "code": "FIZ", "teacher": "MD"},
+        {"start": "10:40", "end": "11:20", "code": "BIY", "teacher": "FS"},
+        {"start": "11:30", "end": "12:10", "code": "KIM", "teacher": "MD"},
+        {"start": "13:00", "end": "13:40", "code": "MAT", "teacher": "AY"},
+        {"start": "13:50", "end": "14:30", "code": "BED", "teacher": "EO"}
+      ]
+    },
+    {
+      "day": "Car",
+      "slots": [
+        {"start": "09:00", "end": "09:40", "code": "TAR", "teacher": "FS"},
+        {"start": "09:50", "end": "10:30", "code": "TAR", "teacher": "FS"},
+        {"start": "10:40", "end": "11:20", "code": "MAT", "teacher": "AY"},
+        {"start": "11:30", "end": "12:10", "code": "ING", "teacher": "EO"},
+        {"start": "13:00", "end": "13:40", "code": "EDB", "teacher": "ZK"},
+        {"start": "13:50", "end": "14:30", "code": "MUZ", "teacher": "ZK"}
+      ]
+    },
+    {
+      "day": "Per",
+      "slots": [
+        {"start": "09:00", "end": "09:40", "code": "KIM", "teacher": "MD"},
+        {"start": "09:50", "end": "10:30", "code": "KIM", "teacher": "MD"},
+        {"start": "10:40", "end": "11:20", "code": "FIZ", "teacher": "MD"},
+        {"start": "11:30", "end": "12:10", "code": "TUR", "teacher": "ZK"},
+        {"start": "13:00", "end": "13:40", "code": "COG", "teacher": "FS"},
+        {"start": "13:50", "end": "14:30", "code": "ING", "teacher": "EO"}
+      ]
+    },
+    {
+      "day": "Cum",
+      "slots": [
+        {"start": "09:00", "end": "09:40", "code": "ING", "teacher": "EO"},
+        {"start": "09:50", "end": "10:30", "code": "EDB", "teacher": "ZK"},
+        {"start": "10:40", "end": "11:20", "code": "BIY", "teacher": "FS"},
+        {"start": "11:30", "end": "12:10", "code": "MAT", "teacher": "AY"},
+        {"start": "13:00", "end": "13:40", "code": "BED", "teacher": "EO"},
+        {"start": "13:50", "end": "14:30", "code": "MAT", "teacher": "AY"}
+      ]
+    }
+  ]
+}
