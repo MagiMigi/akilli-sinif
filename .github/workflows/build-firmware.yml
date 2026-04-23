@@ -78,17 +78,11 @@ jobs:
       - name: Update version.h
         run: |
           VER="${{ steps.ver.outputs.v }}"
-          MAJOR=$(echo "$VER" | cut -d. -f1)
-          MINOR=$(echo "$VER" | cut -d. -f2)
-          PATCH=$(echo "$VER" | cut -d. -f3)
 
           cat > firmware/version.h <<EOF
           #ifndef VERSION_H
           #define VERSION_H
 
-          #define FIRMWARE_VERSION_MAJOR $MAJOR
-          #define FIRMWARE_VERSION_MINOR $MINOR
-          #define FIRMWARE_VERSION_PATCH $PATCH
           #define FIRMWARE_VERSION "$VER"
 
           #define BUILD_DATE __DATE__
