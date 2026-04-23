@@ -476,33 +476,36 @@ void renderSensors(bool full) {
 
   // Sicaklik
   if (abs(temperature - prevTemperature) > 0.05) {
+    tft.fillRect(60, 84, 68, 8, bgColor);
     tft.setTextSize(1);
     tft.setTextColor(getTemperatureColor(temperature), bgColor);
     tft.setCursor(60, 84);
     char tempStr[10];
-    snprintf(tempStr, sizeof(tempStr), "%5.1fC ", temperature);
+    snprintf(tempStr, sizeof(tempStr), "%.1fC", temperature);
     tft.print(tempStr);
     prevTemperature = temperature;
   }
 
   // Nem
   if (abs(humidity - prevHumidity) > 0.5) {
+    tft.fillRect(60, 98, 68, 8, bgColor);
     tft.setTextSize(1);
     tft.setTextColor(COLOR_VALUE, bgColor);
     tft.setCursor(60, 98);
     char humStr[10];
-    snprintf(humStr, sizeof(humStr), "%3.0f%%  ", humidity);
+    snprintf(humStr, sizeof(humStr), "%.0f%%", humidity);
     tft.print(humStr);
     prevHumidity = humidity;
   }
 
   // Hava kalitesi
   if (airQuality != prevAirQuality) {
+    tft.fillRect(60, 112, 68, 8, bgColor);
     tft.setTextSize(1);
     tft.setTextColor(getAirQualityColor(airQuality), bgColor);
     tft.setCursor(60, 112);
     char aqStr[12];
-    snprintf(aqStr, sizeof(aqStr), "%4dppm ", airQuality);
+    snprintf(aqStr, sizeof(aqStr), "%dppm", airQuality);
     tft.print(aqStr);
     prevAirQuality = airQuality;
   }
