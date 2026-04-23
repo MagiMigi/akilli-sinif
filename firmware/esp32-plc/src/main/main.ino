@@ -188,14 +188,15 @@ int prevAirQuality = -999;
 int prevPersonCount = -999;
 bool prevMqttConnected = false;
 AlertLevel prevAlert = ALERT_NONE;
+int prevMinute = -1;
+int prevDay    = -1;
 
 // ============================================
 // MENU / SAYFA SISTEMI
 // ============================================
 
 enum Page {
-  PAGE_SENSORS,    // Sicaklik/nem/hava/kisi
-  PAGE_CLOCK,      // Saat + tarih + geri sayim
+  PAGE_SENSORS,    // Ana ekran: saat/tarih + kisi + sensor
   PAGE_NOW,        // Simdiki ders (ogretmen, konu, ilerleme)
   PAGE_WEEK,       // Haftalik plan (5 gun grid)
   PAGE_ANNOUNCE,   // Duyurular
@@ -364,57 +365,103 @@ int wrapText(const String& text, int x, int y, int cols,
   return row;
 }
 
-// ---- Sayfa: SENSORLER (mevcut ekran) ----
+// ---- Sayfa: ANA EKRAN (saat/tarih + kisi + sensor) ----
 void renderSensors(bool full) {
   uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
 
   if (full) {
     tft.fillScreen(bgColor);
-
-    // Baslik: sinif adi
     drawHeader(CLASSROOM_ID, bgColor);
+
+    // Saat/tarih bolumu alt ayirici
+    tft.drawLine(0, 46, 128, 46, COLOR_LABEL);
 
     // Kisi sayisi etiketi
     tft.setTextSize(1);
     tft.setTextColor(COLOR_LABEL, bgColor);
-    tft.setCursor(5, 25);
+    tft.setCursor(5, 50);
     tft.print("KISI SAYISI");
 
-    // Alt cizgi
-    tft.drawLine(0, 85, 128, 85, COLOR_HEADER);
+    // Sensor bolumu ayirici
+    tft.drawLine(0, 91, 128, 91, COLOR_HEADER);
 
     // Sensor etiketleri
     tft.setTextColor(COLOR_LABEL, bgColor);
-    tft.setCursor(5, 88);  tft.print("Sicaklik:");
-    tft.setCursor(5, 100); tft.print("Nem:");
-    tft.setCursor(5, 112); tft.print("Hava:");
+    tft.setCursor(5, 94);  tft.print("Sicaklik:");
+    tft.setCursor(5, 105); tft.print("Nem:");
+    tft.setCursor(5, 116); tft.print("Hava:");
 
-    // Flicker-onleme icin onceki degerleri sifirla
-    prevTemperature  = -999;
-    prevHumidity     = -999;
-    prevAirQuality   = -999;
-    prevPersonCount  = -999;
+    // Flicker-onleme icin sifirla
+    prevTemperature   = -999;
+    prevHumidity      = -999;
+    prevAirQuality    = -999;
+    prevPersonCount   = -999;
     prevMqttConnected = !mqttConnected;
+    prevMinute        = -1;
+    prevDay           = -1;
   }
 
-  // MQTT durum ikonu (sensors sayfasinda da partial-update sekilde guncel kal)
+  // MQTT durum ikonu
   if (mqttConnected != prevMqttConnected) {
     tft.fillCircle(120, 8, 5, bgColor);
     tft.fillCircle(120, 8, 4, mqttConnected ? COLOR_OK : COLOR_DANGER);
     prevMqttConnected = mqttConnected;
   }
 
+  // Saat / gun / tarih (partial update)
+  struct tm t;
+  bool haveTime = getLocalTime(&t, 100);
+  if (haveTime) {
+    if (t.tm_min != prevMinute) {
+      char timeStr[6];
+      strftime(timeStr, sizeof(timeStr), "%H:%M", &t);
+      tft.fillRect(0, 20, 84, 17, bgColor);
+      tft.setTextSize(2);
+      tft.setTextColor(COLOR_VALUE, bgColor);
+      tft.setCursor(5, 21);
+      tft.print(timeStr);
+
+      const char* dayNames[7] = {"Paz","Pzt","Sal","Car","Per","Cum","Cmt"};
+      tft.fillRect(84, 20, 44, 17, bgColor);
+      tft.setTextSize(1);
+      tft.setTextColor(COLOR_LABEL, bgColor);
+      tft.setCursor(90, 26);
+      tft.print(dayNames[t.tm_wday]);
+
+      prevMinute = t.tm_min;
+    }
+
+    if (t.tm_wday != prevDay) {
+      char dateStr[12];
+      snprintf(dateStr, sizeof(dateStr), "%02d/%02d/%04d",
+               t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
+      tft.fillRect(0, 37, 128, 9, bgColor);
+      tft.setTextSize(1);
+      tft.setTextColor(COLOR_LABEL, bgColor);
+      tft.setCursor(34, 38);
+      tft.print(dateStr);
+      prevDay = t.tm_wday;
+    }
+  } else if (prevMinute != -2) {
+    tft.fillRect(0, 20, 128, 26, bgColor);
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_LABEL, bgColor);
+    tft.setCursor(5, 30);
+    tft.print("NTP bekleniyor...");
+    prevMinute = -2;
+  }
+
   // Kisi sayisi
   if (personCount != prevPersonCount) {
-    tft.setTextSize(4);
+    tft.setTextSize(3);
     tft.setTextColor(personCount == 0 ? COLOR_EMPTY : COLOR_OCCUPIED, bgColor);
-    tft.setCursor(45, 38);
+    tft.setCursor(46, 58);
     char countStr[4];
     snprintf(countStr, sizeof(countStr), "%2d", personCount);
     tft.print(countStr);
 
     tft.setTextSize(1);
-    tft.setCursor(5, 72);
+    tft.setCursor(5, 83);
     if (personCount == 0) {
       tft.setTextColor(COLOR_EMPTY, bgColor);
       tft.print("SINIF BOS  ");
@@ -429,7 +476,7 @@ void renderSensors(bool full) {
   if (abs(temperature - prevTemperature) > 0.05) {
     tft.setTextSize(1);
     tft.setTextColor(getTemperatureColor(temperature), bgColor);
-    tft.setCursor(60, 88);
+    tft.setCursor(60, 94);
     char tempStr[10];
     snprintf(tempStr, sizeof(tempStr), "%5.1fC ", temperature);
     tft.print(tempStr);
@@ -440,7 +487,7 @@ void renderSensors(bool full) {
   if (abs(humidity - prevHumidity) > 0.5) {
     tft.setTextSize(1);
     tft.setTextColor(COLOR_VALUE, bgColor);
-    tft.setCursor(60, 100);
+    tft.setCursor(60, 105);
     char humStr[10];
     snprintf(humStr, sizeof(humStr), "%3.0f%%  ", humidity);
     tft.print(humStr);
@@ -451,7 +498,7 @@ void renderSensors(bool full) {
   if (airQuality != prevAirQuality) {
     tft.setTextSize(1);
     tft.setTextColor(getAirQualityColor(airQuality), bgColor);
-    tft.setCursor(60, 112);
+    tft.setCursor(60, 116);
     char aqStr[12];
     snprintf(aqStr, sizeof(aqStr), "%4dppm ", airQuality);
     tft.print(aqStr);
@@ -467,77 +514,6 @@ int hhmmToMinutes(const String& s) {
   return h * 60 + m;
 }
 
-// ---- Sayfa: SAAT + GERI SAYIM ----
-void renderClock(bool full) {
-  if (full) {
-    tft.fillScreen(COLOR_BG);
-    drawHeader("SAAT", COLOR_BG);
-    tft.drawLine(0, 74, 128, 74, COLOR_HEADER);
-  }
-
-  // Saat kutusu: her zaman yenilenir (dakika degisebilir)
-  struct tm t;
-  bool haveTime = getLocalTime(&t, 100);
-
-  char timeStr[8];
-  char dateStr[20];
-  if (haveTime) {
-    strftime(timeStr, sizeof(timeStr), "%H:%M", &t);
-    const char* dayNames[7]   = {"Paz","Pzt","Sal","Car","Per","Cum","Cmt"};
-    const char* monthNames[12] = {"Oca","Sub","Mar","Nis","May","Haz",
-                                   "Tem","Agu","Eyl","Eki","Kas","Ara"};
-    snprintf(dateStr, sizeof(dateStr), "%s, %02d %s",
-             dayNames[t.tm_wday], t.tm_mday, monthNames[t.tm_mon]);
-  } else {
-    snprintf(timeStr, sizeof(timeStr), "--:--");
-    snprintf(dateStr, sizeof(dateStr), "NTP bekleniyor");
-  }
-
-  // Saat (buyuk, ortalanmis)
-  tft.fillRect(0, 25, 128, 28, COLOR_BG);
-  tft.setTextSize(3);
-  tft.setTextColor(COLOR_VALUE, COLOR_BG);
-  tft.setCursor(19, 28);
-  tft.print(timeStr);
-
-  // Tarih
-  tft.fillRect(0, 56, 128, 12, COLOR_BG);
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_LABEL, COLOR_BG);
-  tft.setCursor(5, 58);
-  tft.print(dateStr);
-
-  // Simdiki ders + geri sayim
-  tft.fillRect(0, 78, 128, 50, COLOR_BG);
-  tft.setTextSize(1);
-  tft.setCursor(5, 82);
-  if (currentLesson.valid) {
-    tft.setTextColor(COLOR_TEXT, COLOR_BG);
-    tft.print("Simdi: ");
-    tft.print(currentLesson.subject.substring(0, 12));
-
-    tft.setCursor(5, 98);
-    if (haveTime) {
-      int nowMins = t.tm_hour * 60 + t.tm_min;
-      int endMins = hhmmToMinutes(currentLesson.endHHMM);
-      if (endMins > 0) {
-        int remain = endMins - nowMins;
-        if (remain > 0) {
-          tft.setTextColor(COLOR_VALUE, COLOR_BG);
-          char buf[24];
-          snprintf(buf, sizeof(buf), "Bitis: %d dk", remain);
-          tft.print(buf);
-        } else {
-          tft.setTextColor(COLOR_WARNING, COLOR_BG);
-          tft.print("Ders bitti");
-        }
-      }
-    }
-  } else {
-    tft.setTextColor(COLOR_LABEL, COLOR_BG);
-    tft.print("Aktif ders yok");
-  }
-}
 
 // ---- Sayfa: SIMDIKI DERS ----
 void renderNow(bool full) {
@@ -718,7 +694,6 @@ void updateDisplay() {
 
   switch (currentPage) {
     case PAGE_SENSORS:  renderSensors(pageDirty);  break;
-    case PAGE_CLOCK:    renderClock(pageDirty);    break;
     case PAGE_NOW:      renderNow(pageDirty);      break;
     case PAGE_WEEK:     renderWeek(pageDirty);     break;
     case PAGE_ANNOUNCE: renderAnnounce(pageDirty); break;
@@ -1223,7 +1198,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     currentLesson.startHHMM = String((const char*)(doc["start"]   | ""));
     currentLesson.endHHMM   = String((const char*)(doc["end"]     | ""));
     currentLesson.valid = currentLesson.subject.length() > 0;
-    if (currentPage == PAGE_CLOCK || currentPage == PAGE_NOW) pageDirty = true;
+    if (currentPage == PAGE_NOW) pageDirty = true;
     Serial.println("[Schedule] current guncellendi: " + currentLesson.subject);
   }
 
