@@ -18,6 +18,14 @@
  *   3. Sinif ID: sinif-2 | MQTT IP: gir
  *   4. Kaydet
  *
+ * AP SIFRESI:
+ *   "Akilli-SIM-Setup" agi WPA2 korumali. Sifre cihaz MAC'inden turetilir
+ *   → "akilli-XXXXXX". Boot anında Serial monitor'de yazilir.
+ *   Web portal HTTP Basic Auth ister: kullanici "admin", sifre yine ayni.
+ *
+ * CONFIG SIFIRLAMA:
+ *   GPIO0 (BOOT) butonuna 5 sn bas → NVS silinir → Portal tekrar acar
+ *
  * Yazar: Akilli Sinif Projesi
  * Tarih: 2026
  */
@@ -28,6 +36,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "../../../version.h"
+#include "../../../secrets.h"   // MQTT user/sifre — repo'ya commit'lenmez
 
 // ============================================
 // YAPILANDIRMA - NVS'DEN OKUNUR
@@ -39,8 +48,8 @@ char MQTT_BROKER[40]  = "";
 char CLASSROOM_ID[20] = "sinif-2";
 
 const int   MQTT_PORT     = 1883;
-const char* MQTT_USER     = "esp32";
-const char* MQTT_PASSWORD = "akilli123";
+const char* MQTT_USER     = MQTT_USER_DEFAULT;      // secrets.h
+const char* MQTT_PASSWORD = MQTT_PASSWORD_DEFAULT;  // secrets.h
 String mqttClientId;
 
 const int CONFIG_RESET_PIN        = 0;
@@ -285,8 +294,51 @@ void loadConfig() {
 // WIFI (WiFiManager)
 // ============================================
 
+// MAC'in son 3 byte'indan benzersiz AP sifresi uretir.
+// Ornek: MAC = AA:BB:CC:11:22:33  →  "akilli-112233"
+// Public repo guvenli: kod sir icermez, sifre cihaz donanimina bagli.
+String makeApPassword() {
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "akilli-%02X%02X%02X", mac[3], mac[4], mac[5]);
+  return String(buf);
+}
+
+// GPIO0 (BOOT) 5 sn basili tutulursa NVS silinir → portal yeniden acar
+void checkConfigReset() {
+  if (digitalRead(CONFIG_RESET_PIN) == LOW) {
+    unsigned long pressStart = millis();
+    Serial.println("[Config] Reset butonu algilandi, 5 sn basili tut...");
+    while (digitalRead(CONFIG_RESET_PIN) == LOW) {
+      if (millis() - pressStart >= RESET_HOLD_MS) {
+        prefs.begin("akilli-sinif", false);
+        prefs.clear();
+        prefs.end();
+        WiFi.disconnect(true, true);
+        Serial.println("[Config] NVS + WiFi silindi! Yeniden baslatiliyor...");
+        delay(1000);
+        ESP.restart();
+      }
+      delay(100);
+    }
+  }
+}
+
 void setupWiFi() {
   WiFiManager wm;
+
+  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) + portal HTTP Basic Auth
+  String apPass = makeApPassword();
+  wm.setHttpUser("admin");
+  wm.setHttpPassword(apPass.c_str());
+
+  Serial.println("[WiFi] ===== AP BILGILERI =====");
+  Serial.println("[WiFi] SSID: Akilli-SIM-Setup");
+  Serial.println("[WiFi] WPA2 Sifre: " + apPass);
+  Serial.println("[WiFi] Web kullanici: admin");
+  Serial.println("[WiFi] Web sifre: " + apPass);
+  Serial.println("[WiFi] ========================");
 
   WiFiManagerParameter p_broker("mqtt_broker",  "MQTT Broker IP",     MQTT_BROKER,  39);
   WiFiManagerParameter p_sinif ("classroom_id", "Sinif ID (sinif-2)", CLASSROOM_ID, 19);
@@ -295,7 +347,7 @@ void setupWiFi() {
   wm.addParameter(&p_sinif);
   wm.setConfigPortalTimeout(180);
 
-  if (!wm.autoConnect("Akilli-SIM-Setup")) {
+  if (!wm.autoConnect("Akilli-SIM-Setup", apPass.c_str())) {
     Serial.println("[WiFi] Baglanti basarisiz! Yeniden baslatiliyor...");
     delay(3000);
     ESP.restart();
@@ -328,6 +380,8 @@ void setup() {
   delay(500);
 
   pinMode(CONFIG_RESET_PIN, INPUT_PULLUP);
+  delay(50);
+  checkConfigReset();
   loadConfig();
 
   Serial.println("\n\n");

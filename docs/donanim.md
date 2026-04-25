@@ -371,7 +371,7 @@ PLC firmware'inin TFT ekraninda gosterilen bilgiler:
 2. Serit LED'i bagla
 3. MQTT'den komut gonder:
    ```bash
-   mosquitto_pub -h localhost -u esp32 -P akilli123 \
+   mosquitto_pub -h localhost -u esp32 -P "$MQTT_PASS" \
      -t "akilli-sinif/sinif-1/control/led" \
      -m '{"brightness": 50}'
    ```
@@ -383,7 +383,7 @@ PLC firmware'inin TFT ekraninda gosterilen bilgiler:
 2. DC Fan'i bagla
 3. MQTT'den komut gonder:
    ```bash
-   mosquitto_pub -h localhost -u esp32 -P akilli123 \
+   mosquitto_pub -h localhost -u esp32 -P "$MQTT_PASS" \
      -t "akilli-sinif/sinif-1/control/fan" \
      -m '{"speed": 50}'
    ```

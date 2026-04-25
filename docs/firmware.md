@@ -112,7 +112,7 @@ Uc yontem vardir:
 ### 2. MQTT Komutu (PLC)
 
 ```bash
-mosquitto_pub -h localhost -u nodered -P nodered123 \
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/sinif-1/control/reset" \
   -m '{"action":"reset_config"}'
 ```

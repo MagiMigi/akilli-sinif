@@ -23,9 +23,15 @@
  *
  * CONFIG SIFIRLAMA:
  *   GPIO0 butonuna 5 sn bas → NVS silinir → Portal tekrar acar
- *   VEYA tarayıcıdan: http://<ESP32-IP>/reset-config
+ *   VEYA tarayıcıdan: http://<ESP32-IP>/reset-config (HTTP Basic Auth ister)
  *   (IP adresini MQTT topic'inden öğren:
  *    akilli-sinif/<sinif-id>/status/ip)
+ *
+ * AP SIFRESI:
+ *   "Akilli-CAM-Setup" agi WPA2 korumali. Sifre cihaz MAC'inden turetilir
+ *   → "akilli-XXXXXX". Boot anında Serial monitor'de yazilir.
+ *   /reset-config endpoint ve portal HTTP Basic Auth ister:
+ *   kullanici "admin", sifre yine ayni.
  *
  * Donanim: AI-Thinker ESP32-CAM
  *
@@ -38,11 +44,13 @@
 #include <WiFiManager.h>     // tzapu/WiFiManager
 #include <Preferences.h>     // NVS
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h> // OTA HTTPS icin
 #include <WebServer.h>       // /reset-config endpoint icin
 #include <PubSubClient.h>    // MQTT - IP yayinlamak icin
 #include <ArduinoJson.h>
 #include <Update.h>          // OTA icin
 #include "../../../version.h"   // Firmware versiyon
+#include "../../../secrets.h"   // MQTT user/sifre — repo'ya commit'lenmez
 
 // ============================================
 // YAPILANDIRMA - NVS'DEN OKUNUR
@@ -56,8 +64,8 @@ char API_KEY[64]       = "";
 
 // MQTT ayarları (IP yayınlamak için — config.json ile aynı değerler)
 char MQTT_BROKER[40] = "192.168.1.100";  // Portal'dan ayarlanır
-char MQTT_USER[20]   = "esp32";
-char MQTT_PASS[20]   = "";
+char MQTT_USER[20]   = MQTT_USER_DEFAULT;       // secrets.h
+char MQTT_PASS[20]   = MQTT_PASSWORD_DEFAULT;   // secrets.h
 
 // Config sifirlama
 const int CONFIG_RESET_PIN        = 0;  // GPIO0 = BOOT butonu
@@ -205,8 +213,8 @@ void loadConfig() {
   String sinifId     = prefs.getString("classroom_id", "sinif-1");
   String apiKey      = prefs.getString("api_key",      "");
   String mqttBroker  = prefs.getString("mqtt_broker",  "");
-  String mqttUser    = prefs.getString("mqtt_user",    "esp32");
-  String mqttPass    = prefs.getString("mqtt_pass",    "");
+  String mqttUser    = prefs.getString("mqtt_user",    MQTT_USER_DEFAULT);
+  String mqttPass    = prefs.getString("mqtt_pass",    MQTT_PASSWORD_DEFAULT);
   prefs.end();
 
   serverUrl.toCharArray(SERVER_URL,    sizeof(SERVER_URL));
@@ -243,25 +251,68 @@ void checkConfigReset() {
 }
 
 // ============================================
-// OTA GÜNCELLEME (HTTP)
+// OTA GÜNCELLEME (HTTPS + CA pin + URL allowlist + MD5)
 // ============================================
 
-// CAM icin basit HTTP OTA (HTTPS olmadan - yerel ag icin yeterli)
-// Eger GitHub'dan HTTPS ile indireceksen esp_https_ota kullan
-void performOTA(const String& url, const String& version) {
+// GitHub Root CA (ISRG Root X1) — ota_manager.cpp ile ayni sertifika
+static const char* GITHUB_ROOT_CA_CAM = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwF
+XeEPKB8QMoGMnp6WKkAXSmzPwOHhYBMmWcXIjkNs7h47I0RbBn+hwL/b6eJmNBj
+jSalqOHFBn6RPZNY60KNRpXYJEGy4OHrNXOPlVIRRRl9T6VmIBAlMgLjzNjgMUCd
+qmg1HcNBGWlNFmBJ0RM+sTgD4DBpMq6DUxT5K7k+X75wTCYGVNKrF/Zzwbe/MUq
+H/FMveVIHJsIWoU3I3MNiOaZmfxhbpnxZb3jgfZEVHhWWFCfEbDMHB+TelKIvSdM
+JuCpjCNv3LrlnHh6FGzRMzAizNOBOuarLkb8x/RVn16sN5U1+kVjGqYBDlJ6kQ==
+-----END CERTIFICATE-----
+)EOF";
+
+// CAM OTA: HTTPS + CA pin'li + URL allowlist + MD5 (opsiyonel ama tavsiye)
+void performOTA(const String& url, const String& version, const String& expectedMd5 = "") {
   Serial.println("[OTA] Guncelleme basliyor: " + version);
   Serial.println("[OTA] URL: " + url);
 
-  // CAM'da PSRAM ve flash kisitli oldugu icin
-  // min_spiffs partition tablosunu kullan!
+  // GUVENLIK: URL allowlist
+  const char* ALLOWED_PREFIX = "https://github.com/MagiMigi/akilli-sinif/releases/";
+  if (!url.startsWith(ALLOWED_PREFIX)) {
+    Serial.println("[OTA] URL allowlist disinda — reddedildi.");
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setCACert(GITHUB_ROOT_CA_CAM);
+  client.setTimeout(30);
+
   HTTPClient http;
-  http.begin(url);
+  http.begin(client, url);
   http.setTimeout(60000);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
-    Serial.printf("[OTA] HTTP hata: %d\n", code);
+    Serial.printf("[OTA] HTTPS hata: %d\n", code);
     http.end();
     return;
   }
@@ -271,6 +322,18 @@ void performOTA(const String& url, const String& version) {
     Serial.println("[OTA] Yetersiz alan! min_spiffs partition gerekli.");
     http.end();
     return;
+  }
+
+  // GUVENLIK: MD5 dogrulama (saglandiysa)
+  if (expectedMd5.length() > 0) {
+    if (!Update.setMD5(expectedMd5.c_str())) {
+      Serial.println("[OTA] MD5 set hatasi (gecersiz format).");
+      Update.abort();
+      http.end();
+      return;
+    }
+  } else {
+    Serial.println("[OTA] UYARI: MD5 saglanmamis, dogrulama atlaniyor!");
   }
 
   WiFiClient* stream = http.getStreamPtr();
@@ -290,12 +353,35 @@ void performOTA(const String& url, const String& version) {
 // WIFI FONKSIYONLARI (WiFiManager)
 // ============================================
 
+// MAC'in son 3 byte'indan benzersiz AP sifresi uretir.
+// Ornek: MAC = AA:BB:CC:11:22:33  →  "akilli-112233"
+// Public repo guvenli: kod sir icermez, sifre cihaz donanimina bagli.
+String makeApPassword() {
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "akilli-%02X%02X%02X", mac[3], mac[4], mac[5]);
+  return String(buf);
+}
+
 void setupWiFi() {
   Serial.println("\n========================================");
   Serial.println("WiFiManager Baslatiliyor (CAM)...");
   Serial.println("========================================");
 
   WiFiManager wm;
+
+  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) + portal HTTP Basic Auth
+  String apPass = makeApPassword();
+  wm.setHttpUser("admin");
+  wm.setHttpPassword(apPass.c_str());
+
+  Serial.println("[WiFi] ===== AP BILGILERI =====");
+  Serial.println("[WiFi] SSID: " + camApName);
+  Serial.println("[WiFi] WPA2 Sifre: " + apPass);
+  Serial.println("[WiFi] Web kullanici: admin");
+  Serial.println("[WiFi] Web sifre: " + apPass);
+  Serial.println("[WiFi] ========================");
 
   // Portal'da ekstra alanlar
   char serverDefault[80];
@@ -317,7 +403,7 @@ void setupWiFi() {
 
   wm.setConfigPortalTimeout(180);
 
-  bool connected = wm.autoConnect(camApName.c_str());
+  bool connected = wm.autoConnect(camApName.c_str(), apPass.c_str());
 
   if (!connected) {
     Serial.println("[WiFi] Baglanti saglanamadi, yeniden baslatiliyor...");
@@ -433,24 +519,36 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
 
   if (doc.containsKey("api_key")) {
     String val = doc["api_key"].as<String>();
-    val.toCharArray(API_KEY, sizeof(API_KEY));
-    prefs.putString("api_key", val);
-    Serial.println("[MQTT] api_key guncellendi.");
-    changed = true;
+    if (val.length() >= sizeof(API_KEY)) {
+      Serial.println("[MQTT] api_key cok uzun — reddedildi.");
+    } else {
+      val.toCharArray(API_KEY, sizeof(API_KEY));
+      prefs.putString("api_key", val);
+      Serial.println("[MQTT] api_key guncellendi.");
+      changed = true;
+    }
   }
   if (doc.containsKey("server_url")) {
     String val = doc["server_url"].as<String>();
-    val.toCharArray(SERVER_URL, sizeof(SERVER_URL));
-    prefs.putString("server_url", val);
-    Serial.println("[MQTT] server_url guncellendi: " + val);
-    changed = true;
+    if (val.length() >= sizeof(SERVER_URL)) {
+      Serial.println("[MQTT] server_url cok uzun — reddedildi.");
+    } else {
+      val.toCharArray(SERVER_URL, sizeof(SERVER_URL));
+      prefs.putString("server_url", val);
+      Serial.println("[MQTT] server_url guncellendi: " + val);
+      changed = true;
+    }
   }
   if (doc.containsKey("mqtt_broker")) {
     String val = doc["mqtt_broker"].as<String>();
-    val.toCharArray(MQTT_BROKER, sizeof(MQTT_BROKER));
-    prefs.putString("mqtt_broker", val);
-    Serial.println("[MQTT] mqtt_broker guncellendi — yeniden baslat gerekebilir.");
-    changed = true;
+    if (val.length() >= sizeof(MQTT_BROKER)) {
+      Serial.println("[MQTT] mqtt_broker cok uzun — reddedildi.");
+    } else {
+      val.toCharArray(MQTT_BROKER, sizeof(MQTT_BROKER));
+      prefs.putString("mqtt_broker", val);
+      Serial.println("[MQTT] mqtt_broker guncellendi — yeniden baslat gerekebilir.");
+      changed = true;
+    }
   }
 
   prefs.end();
@@ -496,8 +594,12 @@ void setupMQTT() {
 // ============================================
 
 void setupWebServer() {
-  // Tarayıcıdan http://<IP>/reset-config ile config sıfırla
+  // Tarayıcıdan http://<IP>/reset-config ile config sıfırla (HTTP Basic Auth)
   webServer.on("/reset-config", HTTP_GET, []() {
+    String pass = makeApPassword();
+    if (!webServer.authenticate("admin", pass.c_str())) {
+      return webServer.requestAuthentication();
+    }
     webServer.send(200, "text/plain",
       "Config siliniyor, cihaz yeniden baslatiliyor...\n"
       "Lutfen 'Akilli-CAM-Setup' WiFi agina baglanin.");
@@ -505,13 +607,17 @@ void setupWebServer() {
     prefs.begin("akilli-cam", false);
     prefs.clear();
     prefs.end();
-    Serial.println("[WebServer] /reset-config cagirildi, NVS silindi.");
+    Serial.println("[WebServer] /reset-config (auth OK), NVS silindi.");
     delay(500);
     ESP.restart();
   });
 
-  // Durum sayfası
+  // Durum sayfası (HTTP Basic Auth — version-leak korumasi)
   webServer.on("/", HTTP_GET, []() {
+    String pass = makeApPassword();
+    if (!webServer.authenticate("admin", pass.c_str())) {
+      return webServer.requestAuthentication();
+    }
     String html = "<h3>Akilli Sinif - ESP32-CAM</h3>";
     html += "<p>Sinif: " + String(CLASSROOM_ID) + "</p>";
     html += "<p>Firmware: v" FIRMWARE_VERSION "</p>";
@@ -632,6 +738,12 @@ void loop() {
       WiFiManager wm;
       wm.setConfigPortalTimeout(300);  // 5 dakika bekle, sonra yeniden dene
 
+      // ── GUVENLIK: WPA2 AP sifresi + portal Basic Auth (boot ile ayni)
+      String apPass = makeApPassword();
+      wm.setHttpUser("admin");
+      wm.setHttpPassword(apPass.c_str());
+      Serial.println("[WiFi] AP yeniden aciliyor — sifre: " + apPass);
+
       // Mevcut değerleri ön doldur
       WiFiManagerParameter p_serverUrl("server_url", "AI Server URL", SERVER_URL, 79);
       WiFiManagerParameter p_classroomId("classroom_id", "Sinif ID", CLASSROOM_ID, 19);
@@ -642,7 +754,7 @@ void loop() {
       wm.addParameter(&p_apiKey);
       wm.addParameter(&p_mqttBroker);
 
-      wm.startConfigPortal(camApName.c_str());
+      wm.startConfigPortal(camApName.c_str(), apPass.c_str());
 
       // Portal kapandı — yeni değerleri kaydet
       String newUrl        = String(p_serverUrl.getValue());

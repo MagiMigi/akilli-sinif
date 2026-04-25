@@ -68,8 +68,16 @@ MQTT_USER = os.getenv("MQTT_USER", "nodered")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 MQTT_BASE_TOPIC = "akilli-sinif"
 
-# API auth anahtarı (.env'den oku)
+# API auth anahtarı (.env'den oku) — ZORUNLU. Bos olamaz.
 API_KEY = os.getenv("API_KEY", "")
+if not API_KEY:
+    raise RuntimeError(
+        "API_KEY .env'de tanimli olmali. Bos birakmak yetkisiz erisime "
+        "izin verir. Rastgele guclu bir string uret: "
+        "`python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`"
+    )
+if len(API_KEY) < 16:
+    raise RuntimeError("API_KEY en az 16 karakter olmali.")
 
 # YOLO ayarları
 MODEL_PATH = "yolov8n.pt"  # Nano model (en hızlı)
@@ -117,14 +125,12 @@ last_person_count = {}  # Her sınıf için son kişi sayısı
 
 def require_api_key(f):
     """
-    API anahtarı kontrolü.
-    İstek header'ında X-API-Key olmalı.
-    API_KEY boşsa auth devre dışı (geliştirme modu).
+    API anahtarı kontrolü. İstek header'ında X-API-Key olmalı.
+    API_KEY startup'ta zorunlu kılındı (boş olamaz).
     """
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not API_KEY:
-            return f(*args, **kwargs)
+        # API_KEY startup'ta zorunlu kilindi — bos olamaz.
         key = request.headers.get("X-API-Key", "")
         if key != API_KEY:
             logger.warning(f"Yetkisiz erişim denemesi: {request.remote_addr}")

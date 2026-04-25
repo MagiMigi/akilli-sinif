@@ -1,0 +1,40 @@
+# =================================================================
+# Akilli Sinif - Mosquitto ACL (Access Control List)
+# =================================================================
+# Kurulum:
+#   sudo cp acl /etc/mosquitto/acl
+#   sudo chown mosquitto:mosquitto /etc/mosquitto/acl
+#   sudo chmod 600 /etc/mosquitto/acl
+# mosquitto.conf'ta `acl_file /etc/mosquitto/acl` satiri aktif olmali.
+#
+# Kurallar yukaridan asagiya degerlendirilir; ilk eslesme kazanir.
+# +  = tek seviye wildcard,  #  = coklu seviye (sadece sonda)
+# =================================================================
+
+# -----------------------------------------------------------------
+# esp32 — fiziksel/simulator cihazlar (PLC, CAM, SIM)
+# -----------------------------------------------------------------
+# Cihazlar kendi sensor/status verisini publish eder, control komutu YAZAMAZ.
+user esp32
+
+# Sensor verisi yayinla (PLC, CAM IP, SIM)
+topic write akilli-sinif/+/sensors/#
+topic write akilli-sinif/+/status/#
+
+# Control komutlarini DINLE (sadece okuma — yazma yok!)
+topic read  akilli-sinif/+/control/#
+topic read  akilli-sinif/all/control/#
+
+# Ders programi + duyurular (Node-RED yayinlar, cihaz okur)
+topic read  akilli-sinif/+/schedule/#
+topic read  akilli-sinif/+/announcements
+
+# -----------------------------------------------------------------
+# nodered — Node-RED ve YOLO sunucusu (tam yetki)
+# -----------------------------------------------------------------
+user nodered
+topic readwrite akilli-sinif/#
+
+# -----------------------------------------------------------------
+# Anonim — kapali (mosquitto.conf: allow_anonymous false)
+# -----------------------------------------------------------------

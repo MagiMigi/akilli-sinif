@@ -8,6 +8,7 @@
 .env.*
 credentials.*
 secrets.*
+!secrets.*.example
 *.key
 *.pem
 wifi_config.json

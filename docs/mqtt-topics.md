@@ -315,39 +315,39 @@ Portal'dan ayarlanir, NVS'e kaydedilir. Varsayilan degerler:
 
 ```bash
 # Tum sensor verilerini dinle
-mosquitto_sub -t "akilli-sinif/+/sensors/#" -u esp32 -P akilli123 -v
+mosquitto_sub -t "akilli-sinif/+/sensors/#" -u esp32 -P "$MQTT_PASS" -v
 
 # Belirli sinifin tum verilerini dinle
-mosquitto_sub -t "akilli-sinif/sinif-1/#" -u esp32 -P akilli123 -v
+mosquitto_sub -t "akilli-sinif/sinif-1/#" -u esp32 -P "$MQTT_PASS" -v
 
 # Sadece sicaklik verilerini dinle
-mosquitto_sub -t "akilli-sinif/+/sensors/temperature" -u esp32 -P akilli123 -v
+mosquitto_sub -t "akilli-sinif/+/sensors/temperature" -u esp32 -P "$MQTT_PASS" -v
 
 # LED'i %50 yap
-mosquitto_pub -h localhost -u nodered -P nodered123 \
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/sinif-1/control/led" \
   -m '{"brightness": 50}'
 
 # Fan'i kapat
-mosquitto_pub -h localhost -u nodered -P nodered123 \
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/sinif-1/control/fan" \
   -m '{"state": "off"}'
 
 # Tehlike uyarisi gonder
-mosquitto_pub -h localhost -u nodered -P nodered123 \
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/sinif-1/control/alert" \
   -m '{"level": "danger", "message": "YANGIN!"}'
 
 # OTA guncelleme tetikle (tek cihaz)
-mosquitto_pub -h localhost -u nodered -P nodered123 \
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/sinif-1/control/ota" \
   -m '{"action":"update","version":"v1.2.0","url":"https://github.com/MagiMigi/akilli-sinif/releases/download/v1.2.0/firmware-plc-v1.2.0.bin"}'
 
 # Tum cihazlara config sifirlama
-mosquitto_pub -h localhost -u nodered -P nodered123 \
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/all/control/reset" \
   -m '{"action":"reset_config"}'
 
 # OTA durumunu izle
-mosquitto_sub -t "akilli-sinif/+/status/ota" -u esp32 -P akilli123 -v
+mosquitto_sub -t "akilli-sinif/+/status/ota" -u esp32 -P "$MQTT_PASS" -v
 ```

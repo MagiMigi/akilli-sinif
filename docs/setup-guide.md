@@ -69,21 +69,27 @@ sudo cp server/mosquitto/mosquitto.conf /etc/mosquitto/mosquitto.conf
 
 ### MQTT Kullanicilarini Olustur
 
+> **GUVENLIK:** Asagidaki sifreler ESKI varsayilan degerlerdir; **public repo
+> oldugu icin yeni kurulumda mutlaka degistir**. Sectiğin yeni sifreyi:
+> 1. `firmware/secrets.h` dosyasina yaz (template: `firmware/secrets.h.example`)
+> 2. `mosquitto_passwd` ile broker tarafina ayni degeri ver.
+> `secrets.h` `.gitignore`'da, repo'ya commit'lenmez.
+
 Sistemde iki MQTT kullanicisi vardir:
 
-| Kullanici | Sifre | Kullanan |
-|-----------|-------|----------|
+| Kullanici | Eski sifre (degistir!) | Kullanan |
+|-----------|------------------------|----------|
 | `esp32` | `akilli123` | ESP32 cihazlari (PLC, CAM, Simulator) |
 | `nodered` | `nodered123` | Node-RED ve YOLO sunucusu |
 
 ```bash
 # esp32 kullanicisi
 sudo mosquitto_passwd -c /etc/mosquitto/passwd esp32
-# Sifre: akilli123
+# Sifre: secrets.h ile AYNI olmali
 
 # nodered kullanicisi
 sudo mosquitto_passwd /etc/mosquitto/passwd nodered
-# Sifre: nodered123
+# Sifre: kendin sec, Node-RED config'inde de ayni degeri kullan
 ```
 
 ### Log Dizini ve Servis
@@ -98,10 +104,10 @@ sudo systemctl enable --now mosquitto
 
 ```bash
 # Terminal 1 — dinle
-mosquitto_sub -h localhost -t "test" -u esp32 -P akilli123
+mosquitto_sub -h localhost -t "test" -u esp32 -P "$MQTT_PASS"
 
 # Terminal 2 — gonder
-mosquitto_pub -h localhost -t "test" -m "Merhaba" -u esp32 -P akilli123
+mosquitto_pub -h localhost -t "test" -m "Merhaba" -u esp32 -P "$MQTT_PASS"
 ```
 
 Terminal 1'de "Merhaba" gormalisin.
@@ -138,7 +144,7 @@ sudo systemctl enable --now influxdb
    | Alan | Deger |
    |------|-------|
    | Username | admin |
-   | Password | akilli123456 |
+   | Password | *(rastgele guclu sifre — `.env`'e `INFLUX_PASSWORD` olarak yaz)* |
    | Organization | AkilliSinif |
    | Bucket | sinif_data |
 
@@ -201,6 +207,33 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now node-red
 ```
 
+### Admin Panel Kimlik Dogrulamasi (ZORUNLU)
+
+Default'ta http://localhost:1880 acik gelir — LAN'da herkes flow'u
+gorebilir/degistirebilir. Bunu kapatmak icin:
+
+```bash
+# 1. Bcrypt sifre hash uret (parolayi soracak)
+node-red admin hash-pw
+# Ciktiyi kopyala (ornek: $2b$08$abc123...)
+
+# 2. ~/.node-red/settings.js dosyasini ac, asagidaki satiri AC ve duzenle:
+#    adminAuth: {
+#        type: "credentials",
+#        users: [{
+#            username: "admin",
+#            password: "<yukaridaki bcrypt hash>",
+#            permissions: "*"
+#        }]
+#    },
+#
+# Ek olarak ayni dosyada:
+#    requireHttps: true,            // (ileride TLS sertifikasi koyunca)
+#    httpAdminAuth opsiyonel — admin path'i adminAuth ile zaten korumali
+```
+
+Sonra `sudo systemctl restart node-red`. Tarayicidan giriste login form'u cikar.
+
 ### Flow'u Iceri Aktar
 
 1. http://localhost:1880 adresine git
@@ -213,8 +246,12 @@ sudo systemctl enable --now node-red
 2. **Server** yanindaki kalem ikonuna tikla
 3. **Security** sekmesi:
    - Username: `nodered`
-   - Password: `nodered123`
+   - Password: `mosquitto_passwd` ile sectiğin sifre
 4. **Update** > **Done** > **Deploy**
+
+> **NOT:** Flow JSON'lari repo'da `password: ""` ile gelir — credential'lar
+> UI'dan girilir ve Node-RED'in `flows_cred.json` dosyasında SAKLI tutulur.
+> ASLA flow JSON icine sifre yazip commit'leme.
 
 ### InfluxDB Yapilandirmasi
 
@@ -255,7 +292,7 @@ sudo systemctl enable --now grafana
 ### Ilk Kurulum
 
 1. http://localhost:3000 > giris: `admin` / `admin`
-2. Yeni sifre: `akilli123456`
+2. Yeni sifre: *(kendi guclu sifreni belirle — InfluxDB ile ayni olabilir)*
 
 ### InfluxDB Datasource Ekle
 
@@ -311,14 +348,14 @@ cp .env.example .env
 `.env` dosyasi icerigi:
 
 ```env
-# MQTT Ayarlari
+# MQTT Ayarlari (.env GITIGNORE'DA — repo'ya commit'leme)
 MQTT_BROKER=localhost
 MQTT_PORT=1883
 MQTT_USER=nodered
-MQTT_PASSWORD=nodered123
+MQTT_PASSWORD=<mosquitto_passwd ile ayarladigin sifre>
 
 # YOLO Sunucu Auth (API anahtari)
-API_KEY=ultra-mega-secret-key
+API_KEY=<rastgele uzun string uret>
 ```
 
 | Degisken | Varsayilan | Aciklama |
@@ -454,13 +491,13 @@ sudo systemctl status mosquitto influxdb node-red grafana
 
 ```bash
 # Terminal 1 — tum mesajlari dinle
-mosquitto_sub -h localhost -t "akilli-sinif/#" -u esp32 -P akilli123 -v
+mosquitto_sub -h localhost -t "akilli-sinif/#" -u esp32 -P "$MQTT_PASS" -v
 
 # Terminal 2 — test verisi gonder
 mosquitto_pub -h localhost \
   -t "akilli-sinif/sinif-1/sensors/temperature" \
   -m '{"value": 23.5, "unit": "C"}' \
-  -u esp32 -P akilli123
+  -u esp32 -P "$MQTT_PASS"
 ```
 
 Terminal 1'de mesaji goruyorsan MQTT calisiyor.
@@ -522,7 +559,7 @@ sudo usermod -a -G dialout $USER # Ubuntu
 systemctl status mosquitto
 
 # Manuel test
-mosquitto_pub -h localhost -u esp32 -P akilli123 -t "test" -m "hello"
+mosquitto_pub -h localhost -u esp32 -P "$MQTT_PASS" -t "test" -m "hello"
 ```
 
 ### InfluxDB'de Veri Yok
@@ -572,11 +609,14 @@ Model dosyasi (`yolov8n.pt`) yoksa otomatik indirilir. Internet baglantisi gerek
 
 ## Baglanti Ozeti
 
-| Servis | Adres | Kullanici | Sifre |
-|--------|-------|-----------|-------|
+> **Sifreler kurulumda sec, repo'da YOK.** Asagidaki "Kaynak" sutunu nereye
+> yazacagini gosterir.
+
+| Servis | Adres | Kullanici | Sifre kaynagi |
+|--------|-------|-----------|---------------|
 | Node-RED | http://localhost:1880 | — | — |
-| Grafana | http://localhost:3000 | admin | akilli123456 |
-| InfluxDB | http://localhost:8086 | admin | akilli123456 |
-| MQTT (ESP32) | localhost:1883 | esp32 | akilli123 |
-| MQTT (Node-RED) | localhost:1883 | nodered | nodered123 |
-| YOLO API | http://localhost:5000 | — | X-API-Key header |
+| Grafana | http://localhost:3000 | admin | InfluxDB ile ayni (kurulumda sectiğin) |
+| InfluxDB | http://localhost:8086 | admin | InfluxDB web kurulum sihirbazinda sec |
+| MQTT (ESP32) | localhost:1883 | esp32 | `firmware/secrets.h` + `mosquitto_passwd` |
+| MQTT (Node-RED) | localhost:1883 | nodered | `.env` (`MQTT_PASSWORD`) + `mosquitto_passwd` |
+| YOLO API | http://localhost:5000 | — | X-API-Key header (`.env` → `API_KEY`) |

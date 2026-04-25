@@ -20,7 +20,7 @@
     "cleansession": true,
     "credentials": {
       "user": "esp32",
-      "password": "akilli123"
+      "password": ""
     }
   },
   {
@@ -45,7 +45,7 @@
     "type": "file in",
     "z": "tab-schedule",
     "name": "schedule.json oku",
-    "filename": "/data/schedule.json",
+    "filename": "/home/magimigi/school/akilli-sinif/server/node-red/data/schedule.json",
     "format": "utf8",
     "chunk": false,
     "sendError": false,

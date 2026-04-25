@@ -157,11 +157,14 @@ Ayarlar NVS'e kalıcı kaydedilir. Sıfırlamak için: **GPIO0 (BOOT) butonuna 5
 
 | Servis | Adres | Giriş |
 |--------|-------|-------|
-| Grafana | http://localhost:3000 | admin / akilli123456 |
+| Grafana | http://localhost:3000 | admin / *(kurulumda sec)* |
 | Node-RED | http://localhost:1880 | — |
-| InfluxDB | http://localhost:8086 | admin / akilli123456 |
-| MQTT Broker | localhost:1883 | esp32 / akilli123 |
-| YOLOv8 API | http://localhost:5000 | API key (.env) |
+| InfluxDB | http://localhost:8086 | admin / *(kurulumda sec)* |
+| MQTT Broker | localhost:1883 | esp32 / *(`firmware/secrets.h`)* |
+| YOLOv8 API | http://localhost:5000 | API key (`.env`) |
+
+> **Not:** Sifreler repo'da YOK — `docs/setup-guide.md` adim adim
+> hangi dosyaya neyi yazacagini gosterir.
 
 ### Grafana Dashboard
 

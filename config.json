@@ -8,7 +8,7 @@
     "broker": "localhost",
     "port": 1883,
     "username": "esp32",
-    "password": "akilli123",
+    "password": "<set in firmware/secrets.h and mosquitto_passwd>",
     "base_topic": "akilli-sinif",
     "keepalive": 60,
     "qos": {

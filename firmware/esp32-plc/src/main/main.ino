@@ -26,6 +26,12 @@
  * CONFIG SIFIRLAMA:
  *   GPIO0 butonuna 5 saniye bas → NVS silinir → Portal tekrar acar
  *
+ * AP SIFRESI:
+ *   AP "Akilli-Sinif-Setup" agi WPA2 korumali. Sifre cihaz MAC'inden
+ *   turetilir → "akilli-XXXXXX" (XXXXXX = MAC'in son 3 byte hex).
+ *   TFT ekranda portal modunda gorulur, cihaz etiketinde de yazili.
+ *   Web portal HTTP Basic Auth ister: kullanici "admin", sifre yine ayni.
+ *
  * Yazar: Akilli Sinif Projesi
  * Tarih: 2026
  */
@@ -40,6 +46,7 @@
 #include <DHT.h>       // DHT sicaklik/nem sensoru
 #include "ota_manager.h"  // OTA guncelleme modulu
 #include "../../../version.h"   // Firmware versiyon
+#include "../../../secrets.h"   // MQTT user/sifre — repo'ya commit'lenmez
 
 // ============================================
 // YAPILANDIRMA - NVS'DEN OKUNUR (hardcoded degil!)
@@ -57,8 +64,8 @@ bool MOCK_MODE         = false;
 
 // Sabit kalan degerler (degistirmen gerekirse portal'a da eklenebilir)
 const int   MQTT_PORT      = 1883;
-const char* MQTT_USER      = "esp32";
-const char* MQTT_PASSWORD  = "akilli123";
+const char* MQTT_USER      = MQTT_USER_DEFAULT;      // secrets.h
+const char* MQTT_PASSWORD  = MQTT_PASSWORD_DEFAULT;  // secrets.h
 
 // MQTT Client ID: sinif ID'sinden otomatik uretilir
 String mqttClientId;  // "esp32-plc-sinif-1" formatinda
@@ -958,26 +965,46 @@ void checkConfigReset() {
 // WIFI FONKSIYONLARI (WiFiManager)
 // ============================================
 
+// MAC'in son 3 byte'indan benzersiz AP sifresi uretir.
+// Ornek: MAC = AA:BB:CC:11:22:33  →  "akilli-112233"
+// Public repo guvenli: kod sir icermez, sifre cihaz donanimina bagli.
+String makeApPassword() {
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "akilli-%02X%02X%02X", mac[3], mac[4], mac[5]);
+  return String(buf);
+}
+
 void setupWiFi() {
   Serial.println("\n========================================");
   Serial.println("WiFiManager Baslatiliyor...");
   Serial.println("========================================");
 
-  // TFT'de goster
+  WiFiManager wm;
+
+  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) + portal HTTP Basic Auth
+  String apPass = makeApPassword();
+  wm.setHttpUser("admin");
+  wm.setHttpPassword(apPass.c_str());
+
+  Serial.println("[WiFi] AP SSID: Akilli-Sinif-Setup");
+  Serial.println("[WiFi] AP/Portal Sifre: " + apPass);
+
+  // TFT'de SSID + sifreyi goster (kurulumcu okuyabilsin)
   tft.fillScreen(COLOR_BG);
   tft.setTextColor(COLOR_HEADER, COLOR_BG);
   tft.setTextSize(1);
-  tft.setCursor(5, 20);
-  tft.println("WiFi Kurulum");
+  tft.setCursor(5, 10);  tft.println("WiFi Kurulum");
   tft.setTextColor(COLOR_LABEL, COLOR_BG);
-  tft.setCursor(5, 38);
-  tft.println("Akilli-Sinif");
-  tft.setCursor(5, 52);
-  tft.println("-Setup agina");
-  tft.setCursor(5, 66);
-  tft.println("baglan");
-
-  WiFiManager wm;
+  tft.setCursor(5, 30);  tft.println("AP: Akilli-Sinif");
+  tft.setCursor(5, 42);  tft.println("    -Setup");
+  tft.setCursor(5, 60);  tft.println("Sifre:");
+  tft.setTextColor(COLOR_WARNING, COLOR_BG);
+  tft.setCursor(5, 75);  tft.println(apPass);
+  tft.setTextColor(COLOR_LABEL, COLOR_BG);
+  tft.setCursor(5, 95);  tft.println("Web admin/sifre");
+  tft.setCursor(5, 107); tft.println("ile portal acilir");
 
   // Portal'da ekstra alanlar (WiFi den ayri config)
   WiFiManagerParameter p_mqttBroker("mqtt_broker", "MQTT Broker IP",
@@ -1001,9 +1028,9 @@ void setupWiFi() {
   bool connected;
   if (forcePortal) {
     Serial.println("[WiFi] Portal modu - baglanmadan once config gerekli.");
-    connected = wm.startConfigPortal("Akilli-Sinif-Setup");
+    connected = wm.startConfigPortal("Akilli-Sinif-Setup", apPass.c_str());
   } else {
-    connected = wm.autoConnect("Akilli-Sinif-Setup");
+    connected = wm.autoConnect("Akilli-Sinif-Setup", apPass.c_str());
   }
 
   if (!connected) {

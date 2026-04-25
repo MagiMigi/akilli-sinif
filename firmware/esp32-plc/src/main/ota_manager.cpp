@@ -63,6 +63,7 @@ bool OTAManager::handleCommand(const String& payload) {
     const char* action  = doc["action"]  | "";
     const char* version = doc["version"] | "";
     const char* url     = doc["url"]     | "";
+    const char* md5     = doc["md5"]     | "";  // opsiyonel ama OZELLIKLE TAVSIYE
 
     // Sadece "update" komutunu işle
     if (strcmp(action, "update") != 0) return false;
@@ -70,6 +71,15 @@ bool OTAManager::handleCommand(const String& payload) {
     if (strlen(url) == 0) {
         Serial.println("[OTA] URL eksik!");
         publishStatus("failed", -1, version, "missing_url");
+        return false;
+    }
+
+    // GUVENLIK: URL allowlist — sadece bu projenin GitHub release'leri kabul
+    String urlStr(url);
+    const char* ALLOWED_PREFIX = "https://github.com/MagiMigi/akilli-sinif/releases/";
+    if (!urlStr.startsWith(ALLOWED_PREFIX)) {
+        Serial.println("[OTA] URL allowlist disinda: " + urlStr);
+        publishStatus("failed", -1, version, "url_not_allowed");
         return false;
     }
 
@@ -82,18 +92,21 @@ bool OTAManager::handleCommand(const String& payload) {
 
     Serial.println("[OTA] Guncelleme basliyor...");
     Serial.println("[OTA] Hedef versiyon: " + String(version));
-    Serial.println("[OTA] URL: " + String(url));
+    Serial.println("[OTA] URL: " + urlStr);
+    if (strlen(md5) > 0) Serial.println("[OTA] MD5: " + String(md5));
+    else Serial.println("[OTA] UYARI: MD5 saglanmamis, dogrulama atlaniyor!");
 
-    return performUpdate(String(url), String(version));
+    return performUpdate(urlStr, String(version), String(md5));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-bool OTAManager::performUpdate(const String& url, const String& version) {
+bool OTAManager::performUpdate(const String& url, const String& version,
+                               const String& expectedMd5) {
     publishStatus("updating", 0, version);
 
     WiFiClientSecure client;
-    client.setInsecure();  // GitHub CDN sertifika zinciri değişkenliği nedeniyle doğrulama atlanıyor
+    client.setCACert(GITHUB_ROOT_CA);  // GitHub root CA pin'li, MITM korumali
     client.setTimeout(30);  // 30 saniye bağlantı timeout
 
     HTTPClient http;
@@ -128,6 +141,17 @@ bool OTAManager::performUpdate(const String& url, const String& version) {
         publishStatus("failed", -1, version, errMsg);
         http.end();
         return false;
+    }
+
+    // GUVENLIK: MD5 dogrulama (saglandiysa). Yanlis MD5 → Update.end() basarisiz.
+    if (expectedMd5.length() > 0) {
+        if (!Update.setMD5(expectedMd5.c_str())) {
+            Serial.println("[OTA] MD5 set hatasi (gecersiz format).");
+            publishStatus("failed", -1, version, "bad_md5_format");
+            Update.abort();
+            http.end();
+            return false;
+        }
     }
 
     // İndirme ve yazma — ilerlemeyi MQTT'ye bildir

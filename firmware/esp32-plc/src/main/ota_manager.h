@@ -41,8 +41,10 @@ private:
     PubSubClient& _mqtt;
     String _statusTopic;
 
-    // HTTPS ile .bin indir ve OTA uygula
-    bool performUpdate(const String& url, const String& version);
+    // HTTPS ile .bin indir ve OTA uygula. expectedMd5 bossa MD5 dogrulama
+    // atlanir (eski Node-RED flow'lariyla uyumluluk icin); doluysa zorunlu.
+    bool performUpdate(const String& url, const String& version,
+                       const String& expectedMd5 = "");
 
     // MQTT'ye OTA durum mesajı gönder
     void publishStatus(const String& status, int progress = -1,
