@@ -53,16 +53,36 @@ jobs:
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Install ESP32 board support
+      - name: Install ESP32 board support (retry on flaky CDN)
         run: |
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls \
             https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core update-index
-          arduino-cli core install esp32:esp32
+          for i in 1 2 3; do
+            arduino-cli core install esp32:esp32 && break
+            echo "Attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
 
       - name: Install libraries
         run: arduino-cli lib install ${{ matrix.libraries }}
+
+      - name: Generate firmware/secrets.h from repo secret
+        env:
+          MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
+        run: |
+          if [ -z "$MQTT_PASSWORD" ]; then
+            echo "::warning::MQTT_PASSWORD repo secret tanimsiz — secrets.h.example kullanilir (CHANGE_ME placeholder)."
+            cp firmware/secrets.h.example firmware/secrets.h
+          else
+            cat > firmware/secrets.h <<EOF
+          #pragma once
+          #define MQTT_USER_DEFAULT      "esp32"
+          #define MQTT_PASSWORD_DEFAULT  "$MQTT_PASSWORD"
+          EOF
+            echo "secrets.h CI secret'tan olusturuldu."
+          fi
 
       - name: Apply custom TFT_eSPI User_Setup.h (PLC only)
         if: matrix.name == 'ESP32-PLC'
