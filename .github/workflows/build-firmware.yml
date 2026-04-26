@@ -101,11 +101,17 @@ jobs:
       - name: Rename binary
         run: mv ./build/main.ino.bin ./${{ matrix.artifact }}-v${{ steps.ver.outputs.v }}.bin
 
+      - name: Generate MD5 checksum
+        run: |
+          BIN=${{ matrix.artifact }}-v${{ steps.ver.outputs.v }}.bin
+          md5sum "$BIN" | awk '{print $1}' > "$BIN.md5"
+          echo "MD5: $(cat $BIN.md5)"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}-*.bin
+          path: ${{ matrix.artifact }}-*
           retention-days: 30
 
   release:
@@ -119,12 +125,12 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
-      - name: Collect binaries
+      - name: Collect binaries + checksums
         run: |
           mkdir -p release
-          mv firmware-plc/*.bin release/
-          mv firmware-cam/*.bin release/
-          mv firmware-sim/*.bin release/
+          mv firmware-plc/* release/
+          mv firmware-cam/* release/
+          mv firmware-sim/* release/
           ls -lh release/
 
       - name: Create GitHub Release
@@ -132,4 +138,4 @@ jobs:
         with:
           name: "Firmware ${{ github.ref_name }}"
           generate_release_notes: true
-          files: release/*.bin
+          files: release/*

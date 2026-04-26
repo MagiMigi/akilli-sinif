@@ -289,7 +289,33 @@ JuCpjCNv3LrlnHh6FGzRMzAizNOBOuarLkb8x/RVn16sN5U1+kVjGqYBDlJ6kQ==
 -----END CERTIFICATE-----
 )EOF";
 
-// CAM OTA: HTTPS + CA pin'li + URL allowlist + MD5 (opsiyonel ama tavsiye)
+// MD5 sidecar (.md5) dosyasini HTTPS+CA pin'li indir. Boş döner = bulunamadı.
+static String fetchOtaMd5Sidecar(const String& binUrl) {
+  WiFiClientSecure mclient;
+  mclient.setCACert(GITHUB_ROOT_CA_CAM);
+  mclient.setTimeout(15);
+
+  HTTPClient mhttp;
+  mhttp.begin(mclient, binUrl + ".md5");
+  mhttp.setTimeout(15000);
+  mhttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  int code = mhttp.GET();
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("[OTA] .md5 sidecar bulunamadi (HTTP %d)\n", code);
+    mhttp.end();
+    return "";
+  }
+  String body = mhttp.getString();
+  mhttp.end();
+  body.trim();
+  if (body.length() < 32) return "";
+  String md5 = body.substring(0, 32);
+  md5.toLowerCase();
+  return md5;
+}
+
+// CAM OTA: HTTPS + CA pin'li + URL allowlist + MD5 (zorunlu, sidecar fallback)
 void performOTA(const String& url, const String& version, const String& expectedMd5 = "") {
   Serial.println("[OTA] Guncelleme basliyor: " + version);
   Serial.println("[OTA] URL: " + url);
@@ -299,6 +325,18 @@ void performOTA(const String& url, const String& version, const String& expected
   if (!url.startsWith(ALLOWED_PREFIX)) {
     Serial.println("[OTA] URL allowlist disinda — reddedildi.");
     return;
+  }
+
+  // GUVENLIK: MD5 zorunlu — payload'da yoksa sidecar (.md5) indir
+  String md5 = expectedMd5;
+  if (md5.length() == 0) {
+    Serial.println("[OTA] MD5 sidecar indiriliyor: " + url + ".md5");
+    md5 = fetchOtaMd5Sidecar(url);
+    if (md5.length() != 32) {
+      Serial.println("[OTA] MD5 yok/gecersiz — guncelleme reddedildi.");
+      return;
+    }
+    Serial.println("[OTA] Sidecar MD5: " + md5);
   }
 
   WiFiClientSecure client;
@@ -324,16 +362,12 @@ void performOTA(const String& url, const String& version, const String& expected
     return;
   }
 
-  // GUVENLIK: MD5 dogrulama (saglandiysa)
-  if (expectedMd5.length() > 0) {
-    if (!Update.setMD5(expectedMd5.c_str())) {
-      Serial.println("[OTA] MD5 set hatasi (gecersiz format).");
-      Update.abort();
-      http.end();
-      return;
-    }
-  } else {
-    Serial.println("[OTA] UYARI: MD5 saglanmamis, dogrulama atlaniyor!");
+  // GUVENLIK: MD5 dogrulama (artik her zaman var)
+  if (!Update.setMD5(md5.c_str())) {
+    Serial.println("[OTA] MD5 set hatasi (gecersiz format).");
+    Update.abort();
+    http.end();
+    return;
   }
 
   WiFiClient* stream = http.getStreamPtr();

@@ -93,17 +93,57 @@ bool OTAManager::handleCommand(const String& payload) {
     Serial.println("[OTA] Guncelleme basliyor...");
     Serial.println("[OTA] Hedef versiyon: " + String(version));
     Serial.println("[OTA] URL: " + urlStr);
-    if (strlen(md5) > 0) Serial.println("[OTA] MD5: " + String(md5));
-    else Serial.println("[OTA] UYARI: MD5 saglanmamis, dogrulama atlaniyor!");
+    if (strlen(md5) > 0) Serial.println("[OTA] MD5 (payload): " + String(md5));
+    else Serial.println("[OTA] MD5 payload'da yok, sidecar (.md5) indirilecek.");
 
     return performUpdate(urlStr, String(version), String(md5));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// MD5 dosyasini ${url}.md5 adresinden HTTPS+CA pin'li olarak indir.
+// Boş döner = bulunamadı / hatali.
+static String fetchMd5Sidecar(const String& binUrl, const char* caCert) {
+    WiFiClientSecure mclient;
+    mclient.setCACert(caCert);
+    mclient.setTimeout(15);
+
+    HTTPClient mhttp;
+    mhttp.begin(mclient, binUrl + ".md5");
+    mhttp.setTimeout(15000);
+    mhttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+    int code = mhttp.GET();
+    if (code != HTTP_CODE_OK) {
+        Serial.printf("[OTA] .md5 sidecar bulunamadi (HTTP %d)\n", code);
+        mhttp.end();
+        return "";
+    }
+    String body = mhttp.getString();
+    mhttp.end();
+    body.trim();
+    if (body.length() < 32) return "";
+    String md5 = body.substring(0, 32);
+    md5.toLowerCase();
+    return md5;
+}
+
 bool OTAManager::performUpdate(const String& url, const String& version,
                                const String& expectedMd5) {
     publishStatus("updating", 0, version);
+
+    // GUVENLIK: MD5 zorunlu — payload'da yoksa sidecar (.md5) indir
+    String md5 = expectedMd5;
+    if (md5.length() == 0) {
+        Serial.println("[OTA] MD5 sidecar indiriliyor: " + url + ".md5");
+        md5 = fetchMd5Sidecar(url, GITHUB_ROOT_CA);
+        if (md5.length() != 32) {
+            Serial.println("[OTA] MD5 sidecar yok/gecersiz — guncelleme reddedildi.");
+            publishStatus("failed", -1, version, "md5_unavailable");
+            return false;
+        }
+        Serial.println("[OTA] Sidecar MD5: " + md5);
+    }
 
     WiFiClientSecure client;
     client.setCACert(GITHUB_ROOT_CA);  // GitHub root CA pin'li, MITM korumali
@@ -143,15 +183,13 @@ bool OTAManager::performUpdate(const String& url, const String& version,
         return false;
     }
 
-    // GUVENLIK: MD5 dogrulama (saglandiysa). Yanlis MD5 → Update.end() basarisiz.
-    if (expectedMd5.length() > 0) {
-        if (!Update.setMD5(expectedMd5.c_str())) {
-            Serial.println("[OTA] MD5 set hatasi (gecersiz format).");
-            publishStatus("failed", -1, version, "bad_md5_format");
-            Update.abort();
-            http.end();
-            return false;
-        }
+    // GUVENLIK: MD5 dogrulama. Yanlis MD5 → Update.end() basarisiz olur.
+    if (!Update.setMD5(md5.c_str())) {
+        Serial.println("[OTA] MD5 set hatasi (gecersiz format).");
+        publishStatus("failed", -1, version, "bad_md5_format");
+        Update.abort();
+        http.end();
+        return false;
     }
 
     // İndirme ve yazma — ilerlemeyi MQTT'ye bildir
