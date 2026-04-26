@@ -30,7 +30,6 @@
  *   AP "Akilli-Sinif-Setup" agi WPA2 korumali. Sifre cihaz MAC'inden
  *   turetilir → "akilli-XXXXXX" (XXXXXX = MAC'in son 3 byte hex).
  *   TFT ekranda portal modunda gorulur, cihaz etiketinde de yazili.
- *   Web portal HTTP Basic Auth ister: kullanici "admin", sifre yine ayni.
  *
  * Yazar: Akilli Sinif Projesi
  * Tarih: 2026
@@ -983,13 +982,10 @@ void setupWiFi() {
 
   WiFiManager wm;
 
-  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) + portal HTTP Basic Auth
+  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) ile portal korumali
   String apPass = makeApPassword();
-  wm.setHttpUser("admin");
-  wm.setHttpPassword(apPass.c_str());
-
   Serial.println("[WiFi] AP SSID: Akilli-Sinif-Setup");
-  Serial.println("[WiFi] AP/Portal Sifre: " + apPass);
+  Serial.println("[WiFi] AP/Portal WPA2 Sifre: " + apPass);
 
   // TFT'de SSID + sifreyi goster (kurulumcu okuyabilsin)
   tft.fillScreen(COLOR_BG);
@@ -999,12 +995,12 @@ void setupWiFi() {
   tft.setTextColor(COLOR_LABEL, COLOR_BG);
   tft.setCursor(5, 30);  tft.println("AP: Akilli-Sinif");
   tft.setCursor(5, 42);  tft.println("    -Setup");
-  tft.setCursor(5, 60);  tft.println("Sifre:");
+  tft.setCursor(5, 60);  tft.println("WPA2 Sifre:");
   tft.setTextColor(COLOR_WARNING, COLOR_BG);
   tft.setCursor(5, 75);  tft.println(apPass);
   tft.setTextColor(COLOR_LABEL, COLOR_BG);
-  tft.setCursor(5, 95);  tft.println("Web admin/sifre");
-  tft.setCursor(5, 107); tft.println("ile portal acilir");
+  tft.setCursor(5, 95);  tft.println("Bagland.sonra");
+  tft.setCursor(5, 107); tft.println("portal acilir");
 
   // Portal'da ekstra alanlar (WiFi den ayri config)
   WiFiManagerParameter p_mqttBroker("mqtt_broker", "MQTT Broker IP",

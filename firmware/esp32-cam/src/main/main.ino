@@ -30,8 +30,8 @@
  * AP SIFRESI:
  *   "Akilli-CAM-Setup" agi WPA2 korumali. Sifre cihaz MAC'inden turetilir
  *   → "akilli-XXXXXX". Boot anında Serial monitor'de yazilir.
- *   /reset-config endpoint ve portal HTTP Basic Auth ister:
- *   kullanici "admin", sifre yine ayni.
+ *   Cihaz baglandiktan sonra HTTP /reset-config ve / endpointleri
+ *   HTTP Basic Auth ister: kullanici "admin", sifre WPA2 ile ayni.
  *
  * Donanim: AI-Thinker ESP32-CAM
  *
@@ -405,16 +405,12 @@ void setupWiFi() {
 
   WiFiManager wm;
 
-  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) + portal HTTP Basic Auth
+  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli)
   String apPass = makeApPassword();
-  wm.setHttpUser("admin");
-  wm.setHttpPassword(apPass.c_str());
 
   Serial.println("[WiFi] ===== AP BILGILERI =====");
   Serial.println("[WiFi] SSID: " + camApName);
   Serial.println("[WiFi] WPA2 Sifre: " + apPass);
-  Serial.println("[WiFi] Web kullanici: admin");
-  Serial.println("[WiFi] Web sifre: " + apPass);
   Serial.println("[WiFi] ========================");
 
   // Portal'da ekstra alanlar
@@ -772,11 +768,9 @@ void loop() {
       WiFiManager wm;
       wm.setConfigPortalTimeout(300);  // 5 dakika bekle, sonra yeniden dene
 
-      // ── GUVENLIK: WPA2 AP sifresi + portal Basic Auth (boot ile ayni)
+      // ── GUVENLIK: WPA2 AP sifresi (boot ile ayni)
       String apPass = makeApPassword();
-      wm.setHttpUser("admin");
-      wm.setHttpPassword(apPass.c_str());
-      Serial.println("[WiFi] AP yeniden aciliyor — sifre: " + apPass);
+      Serial.println("[WiFi] AP yeniden aciliyor — WPA2 sifre: " + apPass);
 
       // Mevcut değerleri ön doldur
       WiFiManagerParameter p_serverUrl("server_url", "AI Server URL", SERVER_URL, 79);

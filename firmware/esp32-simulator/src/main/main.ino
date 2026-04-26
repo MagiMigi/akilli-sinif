@@ -21,7 +21,6 @@
  * AP SIFRESI:
  *   "Akilli-SIM-Setup" agi WPA2 korumali. Sifre cihaz MAC'inden turetilir
  *   → "akilli-XXXXXX". Boot anında Serial monitor'de yazilir.
- *   Web portal HTTP Basic Auth ister: kullanici "admin", sifre yine ayni.
  *
  * CONFIG SIFIRLAMA:
  *   GPIO0 (BOOT) butonuna 5 sn bas → NVS silinir → Portal tekrar acar
@@ -328,16 +327,12 @@ void checkConfigReset() {
 void setupWiFi() {
   WiFiManager wm;
 
-  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli) + portal HTTP Basic Auth
+  // ── GUVENLIK: WPA2 AP sifresi (MAC turevli)
   String apPass = makeApPassword();
-  wm.setHttpUser("admin");
-  wm.setHttpPassword(apPass.c_str());
 
   Serial.println("[WiFi] ===== AP BILGILERI =====");
   Serial.println("[WiFi] SSID: Akilli-SIM-Setup");
   Serial.println("[WiFi] WPA2 Sifre: " + apPass);
-  Serial.println("[WiFi] Web kullanici: admin");
-  Serial.println("[WiFi] Web sifre: " + apPass);
   Serial.println("[WiFi] ========================");
 
   WiFiManagerParameter p_broker("mqtt_broker",  "MQTT Broker IP",     MQTT_BROKER,  39);
