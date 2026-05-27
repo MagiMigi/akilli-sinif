@@ -12,8 +12,8 @@ Hicbir harici direnc gerekmez (ESP32 dahili pullup kullanir).
 | PREV   | GPIO 14   | Onceki sayfa (kisa basis)                 |
 
 GPIO 25 ve GPIO 14 strapping pini degildir; baska bir cevre birim kullanmaz
-(TFT SPI: 15/18/23/32/33, DHT: 4, LDR: 34, MQ-135: 35, PIR: 27, Reed: 26,
-LED: 13, FAN: 12, BOOT reset: 0).
+(TFT SPI: 17/18/23/32/33, DHT: 4, LDR: 34, MQ-135: 35, LM358: 36, PIR: 27,
+Reed: 26, LED: 13, Cooling rölesi: 21, Heating rölesi: 22, BOOT reset: 0).
 
 ## Kablolama
 

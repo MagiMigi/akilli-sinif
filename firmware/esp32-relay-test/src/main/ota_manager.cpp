@@ -104,20 +104,12 @@ bool OTAManager::handleCommand(const String& payload) {
 // MD5 dosyasini ${url}.md5 adresinden HTTPS+CA pin'li olarak indir.
 // Boş döner = bulunamadı / hatali.
 static String fetchMd5Sidecar(const String& binUrl, const char* caCert) {
-    // GUVENLIK: sidecar URL'si de allowlist'te olmali (DNS rebind/CDN edge case).
-    const char* ALLOWED_PREFIX = "https://github.com/MagiMigi/akilli-sinif/releases/";
-    String sidecarUrl = binUrl + ".md5";
-    if (!sidecarUrl.startsWith(ALLOWED_PREFIX)) {
-        Serial.println("[OTA] .md5 sidecar URL allowlist disinda: " + sidecarUrl);
-        return "";
-    }
-
     WiFiClientSecure mclient;
     mclient.setCACert(caCert);
     mclient.setTimeout(15);
 
     HTTPClient mhttp;
-    mhttp.begin(mclient, sidecarUrl);
+    mhttp.begin(mclient, binUrl + ".md5");
     mhttp.setTimeout(15000);
     mhttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 

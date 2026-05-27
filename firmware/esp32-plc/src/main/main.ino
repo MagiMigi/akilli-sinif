@@ -6,7 +6,7 @@
  * - WiFiManager ile guvenli WiFi kurulumu (AP portal, NVS'e kayit)
  * - MQTT ile haberlesme
  * - Sensor okuma (simule veya gercek)
- * - Aktuator kontrolu (LED dimming, fan)
+ * - Aktuator kontrolu (LED dimming, cooling/heating roleleri)
  * - TFT Ekran (ST7735) ile bilgi gosterimi
  * - OTA (Over-the-Air) firmware guncelleme (MQTT tetikli)
  *
@@ -47,6 +47,11 @@
 #include "../../../version.h"   // Firmware versiyon
 #include "../../../secrets.h"   // MQTT user/sifre — repo'ya commit'lenmez
 
+// Forward decl: Arduino IDE auto-prototype'i pollButton(ButtonState&)
+// dosyanin tepesine koyar. Struct asagida tanimli oldugu icin tipi
+// burada bildirmek gerek.
+struct ButtonState;
+
 // ============================================
 // YAPILANDIRMA - NVS'DEN OKUNUR (hardcoded degil!)
 // WiFi + diger ayarlar ilk botta WiFiManager portali
@@ -78,9 +83,13 @@ const unsigned long RESET_HOLD_MS   = 5000;  // 5 saniye bas
 // ============================================
 
 // Sensor Pinleri (gercek donanim icin)
+// NOT: ESP32-CAM (AI-Thinker) kamera pinleri 5/18/19/21'i kullanir.
+// Bu PLC kartinda 21 cooling role'sine ayrilmistir — fiziksel cakisma yok,
+// iki ayri board. Pinleri PLC <-> CAM arasinda tasirken cakisma kontrol et.
 const int PIN_DHT = 4;           // DHT11 sicaklik/nem sensoru
-const int PIN_LDR = 34;          // Isik sensoru (ADC)
-const int PIN_MQ135 = 35;        // Hava kalitesi sensoru (ADC)
+const int PIN_LDR = 34;          // Isik sensoru (ADC, input-only)
+const int PIN_MQ135 = 35;        // Hava kalitesi sensoru (ADC, input-only)
+const int PIN_CURRENT = 36;      // LM358 opamp cikisi (ADC1_CH0, VP, input-only)
 const int PIN_PIR = 27;          // Hareket sensoru
 const int PIN_WINDOW = 26;       // Pencere sensoru (reed switch)
 
@@ -89,17 +98,26 @@ const int PIN_WINDOW = 26;       // Pencere sensoru (reed switch)
 
 // Aktuator Pinleri
 const int PIN_LED = 13;          // LED (PWM ile dimming)
-const int PIN_FAN = 12;          // Fan kontrolu (PWM)
+// GPIO 16: eski PWM/MOSFET fan icin kullaniliyordu, artik bos (ileride ayrilabilir)
+const int PIN_COOLING = 21;      // Role 1 - cooling fan (BC337 + JRC-19F + 12V DC fan)
+const int PIN_HEATING = 22;      // Role 2 - heater (BC337 + JRC-19F + 22ohm 5W direnc)
+#define RELAY_ACTIVE_LEVEL HIGH  // BC337 NPN low-side: GPIO HIGH -> role enerjili
 // NOT: Buzzer yerine gorsel uyari sistemi kullaniliyor (TFT ekran + Status LED)
 
 // Menu Butonlari (ogrencinin sayfayi degistirmesi icin)
 const int PIN_BTN_NEXT = 25;     // Sonraki sayfa (aktif LOW, dahili pullup)
 const int PIN_BTN_PREV = 14;     // Onceki sayfa (aktif LOW, dahili pullup)
 
+// Fiziksel duvar anahtarlari (push button, aktif LOW, INPUT_PULLUP)
+// Online (MQTT) ve fiziksel buton ayni state'i degistirir (toggle mantigi).
+const int PIN_BTN_LED     = 5;   // LED on/off toggle
+const int PIN_BTN_COOLING = 16;  // Cooling on/off toggle (eski PWM fan pini)
+const int PIN_BTN_HEATING = 19;  // Heating on/off toggle
+
 // TFT Ekran Pinleri (ST7735 1.44")
 // NOT: TFT_eSPI kutuphanesi User_Setup.h dosyasindan pin okur
 // Asagidaki pinler referans icindir:
-// TFT_CS   = GPIO 15
+// TFT_CS   = GPIO 17
 // TFT_DC   = GPIO 33  (A0/RS)
 // TFT_RST  = GPIO 32
 // TFT_MOSI = GPIO 23  (SDA)
@@ -131,6 +149,26 @@ int lightLevel = 0;
 int airQuality = 0;
 bool motionDetected = false;
 bool windowOpen = false;
+int rawCurrent = 0;
+float currentAmps = 0.0f;
+float powerWatts = 0.0f;
+
+// 12V besleme gerilimi (sabit kabul)
+const float SUPPLY_VOLTAGE = 12.0f;
+
+// Akim olcumu piecewise-linear kalibrasyon
+// TODO(kalibrasyon): Asagidaki 5 sabit on-degerdir, sahada olcum yapilmadi.
+// Prosedur: docs/donanim.md "Akim sensoru kalibrasyonu" bolumu (~562-572).
+// Yontem: bilinen yuklerle (rolesiz, role aktif, role+strip aktif) gercek
+// akimi ampermetre ile olcup raw ADC ile karsilastirip dogrusal regresyon.
+// Kalibrasyon tarihini ve olcum noktalarini guncellerken buraya yaz.
+// rawCurrent < CAL_THRESHOLD_RAW   -> dusuk bolge (LM358 saturasyonu yakini)
+// rawCurrent >= CAL_THRESHOLD_RAW  -> yuksek bolge (lineer bolge)
+const int   CAL_THRESHOLD_RAW = 800;
+const float CAL_LOW_SCALE_A   = 0.00080f;   // A / raw
+const float CAL_LOW_OFFSET_A  = 0.0f;
+const float CAL_HIGH_SCALE_A  = 0.00095f;   // A / raw
+const float CAL_HIGH_OFFSET_A = -0.12f;
 
 // Kamera verisi (MQTT'den gelecek)
 int personCount = 0;
@@ -138,7 +176,32 @@ unsigned long lastPersonCountUpdate = 0;
 
 // Aktuator Durumlari
 int ledBrightness = 0;           // 0-100 arasi
-int fanSpeed = 0;                // 0-100 arasi
+int lastLedBrightness = 100;     // LED kapanmadan onceki parlaklik (toggle icin yedek)
+bool coolingOn = false;          // Cooling role durumu
+bool heatingOn = false;          // Heating role durumu
+
+// Fiziksel duvar anahtari debounce state'i (push button, aktif LOW)
+struct ToggleBtn {
+  int pin;
+  bool stable;          // son kararli okuma
+  bool lastReading;     // son anlik okuma
+  unsigned long lastChangeMs;
+};
+ToggleBtn btnLedTog     = {PIN_BTN_LED,     HIGH, HIGH, 0};
+ToggleBtn btnCoolingTog = {PIN_BTN_COOLING, HIGH, HIGH, 0};
+ToggleBtn btnHeatingTog = {PIN_BTN_HEATING, HIGH, HIGH, 0};
+const unsigned long TOGGLE_DEBOUNCE_MS = 25;
+
+// Ladder otomasyon kontrolu
+bool autoMode = true;            // true: sicaklik esikleri ile otomatik; false: sadece MQTT
+unsigned long manualOverrideUntil = 0;  // millis() bu degerin altindayken otomatik baski
+const unsigned long MANUAL_OVERRIDE_MS = 5UL * 60UL * 1000UL;  // 5 dk
+
+// Sicaklik esikleri (config.json automation.thermal_control ile ayni)
+const float TEMP_COOL_ON  = 26.0;
+const float TEMP_COOL_OFF = 24.0;
+const float TEMP_HEAT_ON  = 20.0;
+const float TEMP_HEAT_OFF = 22.0;
 
 // Uyari Sistemi (Gorsel)
 enum AlertLevel { ALERT_NONE, ALERT_INFO, ALERT_WARNING, ALERT_DANGER };
@@ -202,33 +265,93 @@ int prevDay    = -1;
 // ============================================
 
 enum Page {
-  PAGE_SENSORS,    // Ana ekran: saat/tarih + kisi + sensor
+  PAGE_HOME = 0,   // Ana ekran (saat + ders + sensor seridi + status)
+  PAGE_SENSORS,    // Detay sensor: kisi sayisi + buyuk sensor degerleri
   PAGE_NOW,        // Simdiki ders (ogretmen, konu, ilerleme)
   PAGE_WEEK,       // Haftalik plan (5 gun grid)
   PAGE_ANNOUNCE,   // Duyurular
   PAGE_COUNT
 };
 
-Page currentPage = PAGE_SENSORS;
+Page currentPage = PAGE_HOME;
 uint32_t lastPageChangeMs = 0;
 bool pageDirty = true;          // sayfa degisti, tam yeniden ciz
-bool rotationPaused = false;    // uzun basis ile duraklatma
+bool rotationPaused = false;    // ikisi-buton basisi ile duraklatma
 
-const uint32_t AUTO_ROTATE_MS       = 6000;   // sayfa cevrim hizi
-const uint32_t BUTTON_DEBOUNCE_MS   = 50;
-const uint32_t BUTTON_LONG_PRESS_MS = 3000;
+// Sayfa basina otomatik gecis suresi (HOME daha uzun durur)
+const uint32_t PAGE_DURATION_MS[PAGE_COUNT] = {
+  15000, // HOME — ana ekran, en uzun
+   6000, // SENSORS
+   6000, // NOW
+   6000, // WEEK
+   6000  // ANNOUNCE
+};
+
+// Buton zamanlama sabitleri (profesyonel debounce + double + hold)
+const uint32_t BUTTON_DEBOUNCE_MS    = 25;
+const uint32_t BUTTON_DOUBLE_GAP_MS  = 400;   // iki kisa basis arasi maksimum
+const uint32_t BUTTON_HOLD_START_MS  = 400;   // bu sure sonra auto-repeat baslar
+const uint32_t BUTTON_HOLD_INTERVAL  = 200;   // auto-repeat aralik
+const uint32_t BUTTON_BOTH_PAUSE_MS  = 1000;  // ikisi-bas: pause toggle suresi
+
+// Buton event queue (loop bloklanmaz, asenkron isleme)
+enum BtnEvent {
+  BTN_NONE = 0,
+  BTN_NEXT_SHORT,
+  BTN_PREV_SHORT,
+  BTN_NEXT_DOUBLE,
+  BTN_PREV_DOUBLE,
+  BTN_NEXT_REPEAT,
+  BTN_PREV_REPEAT
+};
+
+static const uint8_t BTN_QUEUE_SIZE = 8;
+BtnEvent btnQueue[BTN_QUEUE_SIZE];
+uint8_t btnQueueHead = 0;
+uint8_t btnQueueTail = 0;
+
+bool btnQueuePush(BtnEvent e) {
+  uint8_t next = (btnQueueHead + 1) % BTN_QUEUE_SIZE;
+  if (next == btnQueueTail) return false; // dolu, dusur
+  btnQueue[btnQueueHead] = e;
+  btnQueueHead = next;
+  return true;
+}
+
+BtnEvent btnQueuePop() {
+  if (btnQueueHead == btnQueueTail) return BTN_NONE;
+  BtnEvent e = btnQueue[btnQueueTail];
+  btnQueueTail = (btnQueueTail + 1) % BTN_QUEUE_SIZE;
+  return e;
+}
 
 struct ButtonState {
   int pin;
-  bool lastRaw;        // son ham okuma (HIGH = bosta pullup)
-  bool stable;         // debounce sonrasi kararli durum
-  uint32_t lastChangeMs;
-  uint32_t pressStartMs;
-  bool pressHandled;   // uzun/kisa basisi tek sefer isle
+  bool stable;             // HIGH=bosta, LOW=basili (debounce sonrasi)
+  bool lastRaw;            // son ham okuma
+  uint32_t lastChangeMs;   // raw degisim zamani
+  uint32_t pressStartMs;   // basili kalma baslangici
+  uint32_t lastRepeatMs;   // son auto-repeat fire zamani
+  uint32_t pendingSingleMs;// > 0 ise single basis double-window'da bekliyor
+  bool repeatActive;       // hold-repeat baslatti / double parcasi (release'de short emitleme)
+  BtnEvent shortEvent;
+  BtnEvent doubleEvent;
+  BtnEvent repeatEvent;
 };
 
-ButtonState btnNext = {PIN_BTN_NEXT, HIGH, HIGH, 0, 0, true};
-ButtonState btnPrev = {PIN_BTN_PREV, HIGH, HIGH, 0, 0, true};
+ButtonState btnNext = {
+  PIN_BTN_NEXT, HIGH, HIGH, 0, 0, 0, 0, false,
+  BTN_NEXT_SHORT, BTN_NEXT_DOUBLE, BTN_NEXT_REPEAT
+};
+ButtonState btnPrev = {
+  PIN_BTN_PREV, HIGH, HIGH, 0, 0, 0, 0, false,
+  BTN_PREV_SHORT, BTN_PREV_DOUBLE, BTN_PREV_REPEAT
+};
+
+// Ikisi-buton (NEXT+PREV) basili kalinca pause toggle
+uint32_t bothHeldStartMs = 0;
+bool bothPauseFired = false;
+bool bothCurrentlyPressed = false;
 
 // ============================================
 // DERS PROGRAMI / DUYURU VERILERI (MQTT'den gelir)
@@ -299,7 +422,7 @@ void setupDisplay() {
   tft.init();
   tft.setRotation(1);  // Yatay mod (128x128 -> yatay)
   tft.fillScreen(COLOR_BG);
-  
+
   // Baslangic ekrani
   tft.setTextColor(COLOR_HEADER, COLOR_BG);
   tft.setTextSize(1);
@@ -419,6 +542,152 @@ int wrapText(const String& text, int x, int y, int cols,
     row++;
   }
   return row;
+}
+
+// ---- Pagination Dots: alt bantta sayfa gostergeleri ----
+// Her sayfanin alt 8px'inde, ortada noktalar + uclarda < > oklari.
+// Aktif sayfa: dolu daire (header rengi); pasif: kucuk gri nokta.
+// Pause modunda aktif dot rengi sariya doner (header'daki "P" ile cift gosterge).
+void drawPaginationDots(uint8_t current, uint8_t total, bool paused) {
+  const int barY        = 120;
+  const int barH        = 8;
+  const int dotY        = 124;
+  const int leftArrowX  = 3;
+  const int rightArrowX = 119;
+  const int dotsCenterX = 64;
+  const int dotSpacing  = 16;
+
+  uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
+
+  // Bar arka planini temizle
+  tft.fillRect(0, barY, 128, barH, bgColor);
+
+  // Sol/sag oklar (buton yonu ipucu)
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_LABEL, bgColor);
+  tft.setCursor(leftArrowX, barY);
+  tft.print('<');
+  tft.setCursor(rightArrowX, barY);
+  tft.print('>');
+
+  // Noktalari ortala
+  if (total == 0) return;
+  int totalSpan = ((int)total - 1) * dotSpacing;
+  int startX = dotsCenterX - totalSpan / 2;
+  for (uint8_t i = 0; i < total; i++) {
+    int x = startX + (int)i * dotSpacing;
+    if (i == current) {
+      uint16_t color = paused ? COLOR_WARNING : COLOR_HEADER;
+      tft.fillCircle(x, dotY, 2, color);
+    } else {
+      tft.fillCircle(x, dotY, 1, COLOR_LABEL);
+    }
+  }
+}
+
+// ---- Sayfa: HOME (ana ekran) ----
+// Saat+tarih header (ortak drawHeader) + buyuk ders blogu + sensor seridi + status dot
+void renderHome(bool full) {
+  uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
+
+  if (full) {
+    tft.fillScreen(bgColor);
+    drawHeader(CLASSROOM_ID, bgColor);
+  }
+
+  // --- Buyuk blok: o anki ders (y=24..76) ---
+  // y=26: konu (size 2, 16px)
+  // y=44: saat araligi (size 1, 8px)
+  // y=54: "X dk kaldi" (size 1, 8px)
+  // y=64: progress bar (8px) — derslerin gorsel ilerlemesi
+  tft.fillRect(0, 24, 128, 52, bgColor);
+  if (currentLesson.valid) {
+    // Konu (buyuk)
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_HEADER, bgColor);
+    tft.setCursor(5, 26);
+    tft.print(currentLesson.subject.substring(0, 10));
+
+    // Saat araligi
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_LABEL, bgColor);
+    tft.setCursor(5, 44);
+    tft.print(currentLesson.startHHMM);
+    tft.print(" - ");
+    tft.print(currentLesson.endHHMM);
+
+    // Kalan dakika + progress bar
+    struct tm t;
+    float pct = -1.0f;
+    if (getLocalTime(&t, 100)) {
+      int startMins = hhmmToMinutes(currentLesson.startHHMM);
+      int endMins   = hhmmToMinutes(currentLesson.endHHMM);
+      int nowMins   = t.tm_hour * 60 + t.tm_min;
+      if (startMins >= 0 && endMins > startMins && nowMins >= startMins && nowMins <= endMins) {
+        int remaining = endMins - nowMins;
+        pct = (float)(nowMins - startMins) / (float)(endMins - startMins);
+        if (pct < 0) pct = 0;
+        if (pct > 1) pct = 1;
+        tft.setTextColor(COLOR_VALUE, bgColor);
+        tft.setCursor(5, 54);
+        tft.print(remaining);
+        tft.print(" dk kaldi");
+      } else if (nowMins < startMins) {
+        tft.setTextColor(COLOR_LABEL, bgColor);
+        tft.setCursor(5, 54);
+        tft.print("Teneffus");
+      }
+    }
+
+    // Progress bar (her zaman ciz, ders aktif degilse bos goster)
+    const int barX = 5, barY = 64, barW = 118, barH = 8;
+    tft.drawRect(barX, barY, barW, barH, COLOR_HEADER);
+    if (pct >= 0.0f) {
+      int fillW = (int)((barW - 2) * pct);
+      if (fillW > 0) {
+        tft.fillRect(barX + 1, barY + 1, fillW, barH - 2, COLOR_VALUE);
+      }
+    }
+  } else {
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_LABEL, bgColor);
+    tft.setCursor(5, 40);
+    tft.print("Ders yok");
+  }
+
+  // --- Ayirici ---
+  tft.drawLine(0, 78, 128, 78, COLOR_HEADER);
+
+  // --- Sensor seridi (y=82..104) — ogrenci icin anlamli ozet ---
+  // Pencere/PIR/lux kaldirildi: ogrenciye teknik gurultu, K (kisi) zaten doluluk anlam tasiyor.
+  tft.fillRect(0, 82, 128, 22, bgColor);
+  tft.setTextSize(1);
+  char buf[16];
+
+  // Ust satir: Sicaklik / Nem
+  tft.setTextColor(getTemperatureColor(temperature), bgColor);
+  tft.setCursor(2, 84);
+  snprintf(buf, sizeof(buf), "Sic:%.0fC", temperature);
+  tft.print(buf);
+
+  tft.setTextColor(COLOR_VALUE, bgColor);
+  tft.setCursor(70, 84);
+  snprintf(buf, sizeof(buf), "Nem:%.0f%%", humidity);
+  tft.print(buf);
+
+  // Alt satir: Hava kalitesi (ppm) / Kisi sayisi
+  tft.setTextColor(getAirQualityColor(airQuality), bgColor);
+  tft.setCursor(2, 96);
+  int aqShown = airQuality > 999 ? 999 : airQuality;
+  snprintf(buf, sizeof(buf), "Hava:%dppm", aqShown);
+  tft.print(buf);
+
+  tft.setTextColor(personCount == 0 ? COLOR_EMPTY : COLOR_OCCUPIED, bgColor);
+  tft.setCursor(80, 96);
+  snprintf(buf, sizeof(buf), "Kisi:%d", personCount);
+  tft.print(buf);
+
+  // y=108-118 arasi bos (eski Durum bandi). Ihtiyac olursa sayfa duzeni genisletilebilir.
 }
 
 // ---- Sayfa: ANA EKRAN (saat/tarih + kisi + sensor) ----
@@ -704,12 +973,16 @@ void updateDisplay() {
   }
 
   switch (currentPage) {
+    case PAGE_HOME:     renderHome(pageDirty);     break;
     case PAGE_SENSORS:  renderSensors(pageDirty);  break;
     case PAGE_NOW:      renderNow(pageDirty);      break;
     case PAGE_WEEK:     renderWeek(pageDirty);     break;
     case PAGE_ANNOUNCE: renderAnnounce(pageDirty); break;
     default: break;
   }
+
+  // Sayfa altinda navigasyon noktalari (her sayfada)
+  drawPaginationDots((uint8_t)currentPage, (uint8_t)PAGE_COUNT, rotationPaused);
 
   // Header saat/tarih - her tick'te tum sayfalarda guncel
   updateHeaderTime();
@@ -729,7 +1002,9 @@ void changePage(int delta) {
   updateDisplay();  // butona basildiginda anlik tepki
 }
 
-void pollButton(ButtonState& b, int direction, bool allowLongPress) {
+// Tek buton durum makinesi: debounce -> short / double / hold-repeat eventleri uretir.
+// Pause toggle bu fonksiyonda DEGIL — checkBothButtonsPause()'da yapilir.
+void pollButton(ButtonState& b) {
   bool raw = digitalRead(b.pin);
   uint32_t now = millis();
 
@@ -738,43 +1013,129 @@ void pollButton(ButtonState& b, int direction, bool allowLongPress) {
     b.lastRaw = raw;
   }
 
+  // Debounce sonrasi stable durumu guncelle
   if ((now - b.lastChangeMs) > BUTTON_DEBOUNCE_MS && raw != b.stable) {
     b.stable = raw;
     if (b.stable == LOW) {
-      // Basildi
+      // PRESS: yeni basis baslangici
       b.pressStartMs = now;
-      b.pressHandled = false;
-    } else {
-      // Birakildi
-      if (!b.pressHandled) {
-        uint32_t held = now - b.pressStartMs;
-        if (held < BUTTON_LONG_PRESS_MS) {
-          changePage(direction);
-        }
-        b.pressHandled = true;
+      b.repeatActive = false;
+      b.lastRepeatMs = 0;
+      // Onceki single basis double-window icindeyse → DOUBLE event
+      if (b.pendingSingleMs != 0 &&
+          (now - b.pendingSingleMs) <= BUTTON_DOUBLE_GAP_MS) {
+        btnQueuePush(b.doubleEvent);
+        b.pendingSingleMs = 0;
+        b.repeatActive = true;  // bu basis double-parcasi, release SHORT emitleme
+      } else {
+        b.pendingSingleMs = 0;
       }
+    } else {
+      // RELEASE
+      if (!b.repeatActive) {
+        // Single basis bekle (ardindan double gelirse iptal)
+        b.pendingSingleMs = now;
+      }
+      b.repeatActive = false;
     }
   }
 
-  // Uzun basis (sadece NEXT butonunda aktif)
-  if (allowLongPress && b.stable == LOW && !b.pressHandled) {
-    if ((now - b.pressStartMs) >= BUTTON_LONG_PRESS_MS) {
+  // Hold ile auto-repeat (ikisi-buton modunda devre disi).
+  // lastRepeatMs == 0 sentinel: repeatActive=true ama henuz hold-fire olmamis demek.
+  // Boylece double-press veya bothPause sonrasi parmak basili kalsa bile REPEAT firlatmaz.
+  if (b.stable == LOW && !bothCurrentlyPressed) {
+    if (!b.repeatActive) {
+      if ((now - b.pressStartMs) >= BUTTON_HOLD_START_MS) {
+        btnQueuePush(b.repeatEvent);
+        b.repeatActive = true;
+        b.lastRepeatMs = now;
+      }
+    } else if (b.lastRepeatMs != 0) {
+      if ((now - b.lastRepeatMs) >= BUTTON_HOLD_INTERVAL) {
+        btnQueuePush(b.repeatEvent);
+        b.lastRepeatMs = now;
+      }
+    }
+    // repeatActive=true && lastRepeatMs==0 → suppressed (double/bothPause)
+  }
+
+  // Pending single zamanasimi → SHORT emit (double gelmedi)
+  if (b.pendingSingleMs != 0 &&
+      (now - b.pendingSingleMs) > BUTTON_DOUBLE_GAP_MS) {
+    btnQueuePush(b.shortEvent);
+    b.pendingSingleMs = 0;
+  }
+}
+
+// Ikisi-buton (NEXT+PREV) basili kalinca pause toggle.
+// Single-button eventlerini bastirmak icin bothCurrentlyPressed flag set edilir.
+void checkBothButtonsPause() {
+  uint32_t now = millis();
+  bool both = (btnNext.stable == LOW) && (btnPrev.stable == LOW);
+
+  if (both) {
+    if (bothHeldStartMs == 0) bothHeldStartMs = now;
+    if (!bothPauseFired && (now - bothHeldStartMs) >= BUTTON_BOTH_PAUSE_MS) {
       rotationPaused = !rotationPaused;
       pageDirty = true;
-      updateDisplay();
-      b.pressHandled = true;
+      bothPauseFired = true;
+      // Tek-buton bekleyen eventleri iptal et
+      btnNext.pendingSingleMs = 0;
+      btnPrev.pendingSingleMs = 0;
+      btnNext.repeatActive = true;
+      btnPrev.repeatActive = true;
+      Serial.print("[Menu] Pause: ");
+      Serial.println(rotationPaused ? "AKTIF" : "PASIF");
     }
+  } else {
+    bothHeldStartMs = 0;
+    bothPauseFired = false;
   }
 }
 
 void pollButtons() {
-  pollButton(btnNext, +1, true);
-  pollButton(btnPrev, -1, false);
+  // bothCurrentlyPressed bayragi pollButton icindeki hold-repeat'i bastirir
+  bothCurrentlyPressed = (btnNext.stable == LOW) && (btnPrev.stable == LOW);
+  pollButton(btnNext);
+  pollButton(btnPrev);
+  checkBothButtonsPause();
+}
+
+void handleButtonEvent(BtnEvent ev) {
+  switch (ev) {
+    case BTN_NEXT_SHORT:
+    case BTN_NEXT_REPEAT:
+      changePage(+1);
+      break;
+    case BTN_PREV_SHORT:
+    case BTN_PREV_REPEAT:
+      changePage(-1);
+      break;
+    case BTN_NEXT_DOUBLE:
+    case BTN_PREV_DOUBLE:
+      // Cift bas: ana ekrana (HOME) hizli donus
+      currentPage = PAGE_HOME;
+      lastPageChangeMs = millis();
+      pageDirty = true;
+      updateDisplay();
+      break;
+    default:
+      break;
+  }
+}
+
+void processButtonEvents() {
+  while (true) {
+    BtnEvent e = btnQueuePop();
+    if (e == BTN_NONE) break;
+    handleButtonEvent(e);
+  }
 }
 
 void handleAutoRotate() {
   if (rotationPaused) return;
-  if ((millis() - lastPageChangeMs) >= AUTO_ROTATE_MS) {
+  uint32_t dur = PAGE_DURATION_MS[(int)currentPage];
+  if ((millis() - lastPageChangeMs) >= dur) {
     changePage(+1);
   }
 }
@@ -784,7 +1145,18 @@ void setupButtons() {
   pinMode(PIN_BTN_PREV, INPUT_PULLUP);
   btnNext.lastRaw = btnNext.stable = digitalRead(PIN_BTN_NEXT);
   btnPrev.lastRaw = btnPrev.stable = digitalRead(PIN_BTN_PREV);
+  btnQueueHead = btnQueueTail = 0;
   Serial.println("[Menu] Butonlar hazir: NEXT=GPIO25, PREV=GPIO14");
+  Serial.println("[Menu] Kisa=ge, Cift=HOME, Basili tut=hizli ge, Ikisi-bas=pause");
+
+  // Fiziksel duvar anahtarlari (LED/Cooling/Heating toggle)
+  pinMode(PIN_BTN_LED,     INPUT_PULLUP);
+  pinMode(PIN_BTN_COOLING, INPUT_PULLUP);
+  pinMode(PIN_BTN_HEATING, INPUT_PULLUP);
+  btnLedTog.lastReading     = btnLedTog.stable     = digitalRead(PIN_BTN_LED);
+  btnCoolingTog.lastReading = btnCoolingTog.stable = digitalRead(PIN_BTN_COOLING);
+  btnHeatingTog.lastReading = btnHeatingTog.stable = digitalRead(PIN_BTN_HEATING);
+  Serial.println("[Switch] Duvar anahtarlari: LED=GPIO5 COOLING=GPIO16 HEATING=GPIO19");
 }
 
 // ============================================
@@ -961,6 +1333,106 @@ void checkConfigReset() {
 }
 
 // ============================================
+// RUNTIME PORTAL TETIKLEYICI (loop() icinden)
+// ============================================
+// Cihaz acikken BOOT (GPIO0) 5 sn basili tutulursa:
+//   - TFT'de buyuk geri sayim 5..1 gosterir
+//   - NVS'e "force_portal" bayragi yazar
+//   - Cihaz yeniden baslar, setupWiFi() WiFi portal acar
+// Bayrak yaklasiminin avantaji: sinif_id / mock_mode / mqtt_broker
+// silinmez — portal mevcut degerleri gosterir, kullanici sadece
+// degistirmek istedigini gunceller.
+unsigned long bootBtnPressStartMs   = 0;
+bool          bootCountdownActive   = false;
+int           lastBootCountdownShown = -1;
+
+void checkRuntimePortalRequest() {
+  bool pressed = (digitalRead(CONFIG_RESET_PIN) == LOW);
+
+  // DEBUG: her press/release gecisinde Serial'a log
+  static bool wasPressed = false;
+  if (pressed != wasPressed) {
+    Serial.printf("[Portal] BOOT pini %s (millis=%lu)\n",
+                  pressed ? "BASILI (LOW)" : "BIRAKILDI (HIGH)", millis());
+    wasPressed = pressed;
+  }
+
+  if (!pressed) {
+    if (bootCountdownActive) {
+      pageDirty = true;  // iptal -> normal sayfa yeniden cizilsin
+      bootCountdownActive = false;
+    }
+    bootBtnPressStartMs    = 0;
+    lastBootCountdownShown = -1;
+    return;
+  }
+
+  unsigned long now = millis();
+  if (bootBtnPressStartMs == 0) {
+    bootBtnPressStartMs = now;
+    Serial.println("[Portal] press timer baslatildi");
+    return;
+  }
+
+  unsigned long held = now - bootBtnPressStartMs;
+  if (held < 400) return;  // 400 ms'den kisa basislari yoksay (yanlislikla)
+
+  if (!bootCountdownActive) {
+    bootCountdownActive    = true;
+    lastBootCountdownShown = -1;
+    tft.fillScreen(COLOR_BG);
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_WARNING, COLOR_BG);
+    tft.setCursor(5, 6);
+    tft.println("WEB PORTAL");
+    tft.setCursor(5, 18);
+    tft.println("aciliyor...");
+    tft.setTextColor(COLOR_LABEL, COLOR_BG);
+    tft.setCursor(5, 110);
+    tft.println("BOOT'u birak");
+    tft.setCursor(5, 120);
+    tft.println("=> iptal");
+  }
+
+  int remaining = (int)((RESET_HOLD_MS - held) / 1000) + 1;
+  if (remaining < 1) remaining = 1;
+  if (remaining > 5) remaining = 5;
+
+  if (remaining != lastBootCountdownShown) {
+    tft.fillRect(0, 40, 128, 60, COLOR_BG);
+    tft.setTextSize(6);
+    tft.setTextColor(COLOR_DANGER, COLOR_BG);
+    tft.setCursor(46, 48);
+    tft.print(remaining);
+    lastBootCountdownShown = remaining;
+  }
+
+  if (held >= RESET_HOLD_MS) {
+    // Bayragi yaz + cihazi yeniden baslat
+    prefs.begin("akilli-sinif", false);
+    prefs.putBool("force_portal", true);
+    prefs.end();
+
+    tft.fillScreen(COLOR_BG);
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_OK, COLOR_BG);
+    tft.setCursor(5, 25);
+    tft.println("WiFi PORTAL");
+    tft.setCursor(5, 40);
+    tft.println("aciliyor...");
+    tft.setTextColor(COLOR_LABEL, COLOR_BG);
+    tft.setCursor(5, 70);
+    tft.println("Yeniden");
+    tft.setCursor(5, 82);
+    tft.println("basliyor...");
+
+    Serial.println("[Portal] Runtime BOOT 5sn -> portal modunda yeniden baslatiliyor");
+    delay(1500);
+    ESP.restart();
+  }
+}
+
+// ============================================
 // WIFI FONKSIYONLARI (WiFiManager)
 // ============================================
 
@@ -1018,8 +1490,19 @@ void setupWiFi() {
   // Baglandiktan sonra 192.168.4.1 otomatik acar
   wm.setConfigPortalTimeout(180);  // 3 dakika icinde baglanilmazsa devam et
 
-  // Config sifirlandiysa (broker IP bos) veya BOOT butonu basili ise portal ac
-  bool forcePortal = (strlen(MQTT_BROKER) == 0) || (digitalRead(CONFIG_RESET_PIN) == LOW);
+  // NVS'teki force_portal bayragini oku (runtime BOOT 5sn ile set edilir)
+  prefs.begin("akilli-sinif", false);
+  bool forcePortalFlag = prefs.getBool("force_portal", false);
+  if (forcePortalFlag) prefs.remove("force_portal");  // one-shot
+  prefs.end();
+
+  // Portal acma sartlari:
+  //  - NVS bayragi (runtime BOOT 5sn)
+  //  - Config sifirlandi / hic kayit yok (broker IP bos)
+  //  - Acilista BOOT basili
+  bool forcePortal = forcePortalFlag
+                     || (strlen(MQTT_BROKER) == 0)
+                     || (digitalRead(CONFIG_RESET_PIN) == LOW);
 
   bool connected;
   if (forcePortal) {
@@ -1086,17 +1569,17 @@ void setupWiFi() {
   delay(1500);
 }
 
+// Non-blocking: WiFi.reconnect() asenkron, durum sonraki WIFI_CHECK_INTERVAL'da okunur.
+// Eskiden delay(5000) ile loop'u bloke ediyordu.
 void checkWiFi() {
-  if (WiFi.status() != WL_CONNECTED) {
+  wl_status_t st = WiFi.status();
+  if (st != WL_CONNECTED) {
+    if (wifiConnected) Serial.println("[WiFi] Baglanti koptu! reconnect tetiklendi.");
     wifiConnected = false;
-    Serial.println("[WiFi] Baglanti koptu! Yeniden baglaniliyor...");
-    // WiFiManager mevcut kimlik bilgileri ile otomatik yeniden baglantı kurar
     WiFi.reconnect();
-    delay(5000);
-    if (WiFi.status() == WL_CONNECTED) {
-      wifiConnected = true;
-      Serial.println("[WiFi] Yeniden baglandi.");
-    }
+  } else if (!wifiConnected) {
+    wifiConnected = true;
+    Serial.println("[WiFi] Yeniden baglandi.");
   }
 }
 
@@ -1148,6 +1631,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   else if (topicStr.endsWith("/control/led")) {
     if (doc.containsKey("brightness")) {
       int brightness = doc["brightness"];
+      if (brightness > 0) lastLedBrightness = brightness;  // fiziksel toggle icin yedek
       setLedBrightness(brightness);
       Serial.print("LED Parlakligi ayarlandi: ");
       Serial.print(brightness);
@@ -1156,34 +1640,43 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (doc.containsKey("state")) {
       const char* state = doc["state"];
       if (strcmp(state, "on") == 0) {
-        setLedBrightness(100);
+        setLedBrightness(lastLedBrightness > 0 ? lastLedBrightness : 100);
         Serial.println("LED ACILDI");
       } else if (strcmp(state, "off") == 0) {
+        if (ledBrightness > 0) lastLedBrightness = ledBrightness;  // kapanmadan once yedekle
         setLedBrightness(0);
         Serial.println("LED KAPATILDI");
       }
     }
   }
   
-  // Fan Kontrolu
-  // Topic: akilli-sinif/sinif-1/control/fan
-  else if (topicStr.endsWith("/control/fan")) {
-    if (doc.containsKey("speed")) {
-      int speed = doc["speed"];
-      setFanSpeed(speed);
-      Serial.print("Fan Hizi ayarlandi: ");
-      Serial.print(speed);
-      Serial.println("%");
+  // Cooling Role Kontrolu (12V DC fan, BC337 + JRC-19F)
+  // Topic: akilli-sinif/sinif-1/control/cooling   payload: {"state":"on"|"off"}
+  else if (topicStr.endsWith("/control/cooling")) {
+    bool on;
+    if (parseOnOff(doc, on)) {
+      manualOverrideUntil = millis() + MANUAL_OVERRIDE_MS;
+      setCooling(on);
     }
-    if (doc.containsKey("state")) {
-      const char* state = doc["state"];
-      if (strcmp(state, "on") == 0) {
-        setFanSpeed(50);
-        Serial.println("Fan ACILDI");
-      } else if (strcmp(state, "off") == 0) {
-        setFanSpeed(0);
-        Serial.println("Fan KAPATILDI");
-      }
+  }
+
+  // Heating Role Kontrolu (22ohm 5W direnc, BC337 + JRC-19F)
+  // Topic: akilli-sinif/sinif-1/control/heating   payload: {"state":"on"|"off"}
+  else if (topicStr.endsWith("/control/heating")) {
+    bool on;
+    if (parseOnOff(doc, on)) {
+      manualOverrideUntil = millis() + MANUAL_OVERRIDE_MS;
+      setHeating(on);
+    }
+  }
+
+  // Otomasyon mod degistirme (auto ladder vs sadece MQTT)
+  // Topic: akilli-sinif/sinif-1/control/mode   payload: {"auto":true|false}
+  else if (topicStr.endsWith("/control/mode")) {
+    if (doc.containsKey("auto")) {
+      autoMode = doc["auto"].as<bool>();
+      Serial.print("[Mode] autoMode=");
+      Serial.println(autoMode ? "true" : "false");
     }
   }
   
@@ -1321,6 +1814,7 @@ void setupMQTT() {
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(1024);  // Buyuk JSON mesajlari + OTA komutlari icin arttirildi
+  mqttClient.setSocketTimeout(2);  // Default 15 sn -> 2 sn: broker erisilemezse loop bloke olmasin
 
   // OTA manager'i basklat (MQTT client hazir olduktan sonra)
   if (otaManager != nullptr) delete otaManager;
@@ -1328,107 +1822,32 @@ void setupMQTT() {
   Serial.println("[OTA] OTA Manager hazir. Firmware: v" + OTAManager::getCurrentVersion());
 }
 
+// Non-blocking: tek deneme yapar, loop() MQTT_RECONNECT_INTERVAL (5sn) ile tekrar cagirir.
+// Eskiden while+delay(3000) ile 15 sn'ye kadar loop'u bloke ediyordu —
+// bu sirada BOOT/menu butonlari okunamiyordu.
 void connectMQTT() {
-  Serial.println("\n========================================");
-  Serial.println("MQTT Broker'a Baglaniliyor...");
-  Serial.println("========================================");
-  Serial.print("Broker: ");
+  Serial.print("[MQTT] Baglanti denemesi (broker=");
   Serial.print(MQTT_BROKER);
-  Serial.print(":");
-  Serial.println(MQTT_PORT);
-  
-  // Ekranda goster
-  tft.fillScreen(COLOR_BG);
-  tft.setTextColor(COLOR_HEADER, COLOR_BG);
-  tft.setTextSize(1);
-  tft.setCursor(10, 30);
-  tft.println("MQTT");
-  tft.setCursor(10, 45);
-  tft.println("Baglaniyor...");
-  
-  while (!mqttClient.connected() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    Serial.print("MQTT Baglanti denemesi ");
-    Serial.print(reconnectAttempts + 1);
-    Serial.print("/");
-    Serial.print(MAX_RECONNECT_ATTEMPTS);
-    Serial.println("...");
-    
-    // LWT (Last Will and Testament) mesaji
-    // Baglanti kopunca bu mesaj otomatik yayinlanir
-    String willTopic   = buildTopic("status", "connection");
-    String willMessage = "{\"status\":\"offline\",\"device\":\"" + mqttClientId + "\"}";
+  Serial.print("): ");
 
-    if (mqttClient.connect(mqttClientId.c_str(), MQTT_USER, MQTT_PASSWORD,
-                           willTopic.c_str(), 1, true, willMessage.c_str())) {
-      mqttConnected = true;
-      reconnectAttempts = 0;
-      
-      Serial.println("\n----------------------------------------");
-      Serial.println("MQTT BAGLANDI!");
-      Serial.println("----------------------------------------");
-      
-      // Ekranda goster
-      tft.fillScreen(COLOR_BG);
-      tft.setTextColor(COLOR_OK, COLOR_BG);
-      tft.setCursor(10, 30);
-      tft.println("MQTT OK!");
-      delay(500);
+  String willTopic   = buildTopic("status", "connection");
+  String willMessage = "{\"status\":\"offline\",\"device\":\"" + mqttClientId + "\"}";
 
-      // Ana ekrani tekrar ciz
-      pageDirty = true;
-      
-      // Kontrol topic'lerine subscribe ol
-      subscribeToControlTopics();
-      
-      // Online durum mesaji gonder
-      publishStatus("online");
-      
-    } else {
-      Serial.print("Baglanti BASARISIZ, hata kodu: ");
-      Serial.println(mqttClient.state());
-      /*
-       * Hata Kodlari:
-       * -4 : MQTT_CONNECTION_TIMEOUT
-       * -3 : MQTT_CONNECTION_LOST
-       * -2 : MQTT_CONNECT_FAILED
-       * -1 : MQTT_DISCONNECTED
-       *  1 : MQTT_CONNECT_BAD_PROTOCOL
-       *  2 : MQTT_CONNECT_BAD_CLIENT_ID
-       *  3 : MQTT_CONNECT_UNAVAILABLE
-       *  4 : MQTT_CONNECT_BAD_CREDENTIALS
-       *  5 : MQTT_CONNECT_UNAUTHORIZED
-       */
-      reconnectAttempts++;
-      
-      // Ekranda deneme sayisini goster
-      tft.fillRect(10, 80, 100, 15, COLOR_BG);
-      tft.setTextColor(COLOR_WARNING, COLOR_BG);
-      tft.setCursor(10, 80);
-      tft.print("Deneme: ");
-      tft.print(reconnectAttempts);
-      tft.print("/");
-      tft.print(MAX_RECONNECT_ATTEMPTS);
-      
-      delay(3000);  // 3 saniye bekle
-    }
-  }
-  
-  if (!mqttClient.connected()) {
-    Serial.println("\n!!! MQTT BAGLANTI HATASI !!!");
-    Serial.println("5 saniye sonra tekrar denenecek...");
-    
-    // Ekranda hata goster
-    tft.fillScreen(COLOR_BG);
-    tft.setTextColor(COLOR_DANGER, COLOR_BG);
-    tft.setCursor(10, 30);
-    tft.println("MQTT HATA!");
-    tft.setCursor(10, 50);
-    tft.println("Tekrar");
-    tft.setCursor(10, 65);
-    tft.println("deneniyor...");
-    
-    // Sonraki denemede tekrar dene
+  if (mqttClient.connect(mqttClientId.c_str(), MQTT_USER, MQTT_PASSWORD,
+                         willTopic.c_str(), 1, true, willMessage.c_str())) {
+    mqttConnected = true;
     reconnectAttempts = 0;
+    Serial.println("BAGLANDI!");
+
+    pageDirty = true;
+    subscribeToControlTopics();
+    publishStatus("online");
+  } else {
+    reconnectAttempts++;
+    Serial.printf("BASARISIZ (hata=%d, deneme=%d)\n",
+                  mqttClient.state(), reconnectAttempts);
+    // Hata kodlari: -4 TIMEOUT, -3 LOST, -2 FAILED, -1 DISCONNECTED
+    //                1 BAD_PROTOCOL, 2 BAD_CLIENT, 3 UNAVAILABLE, 4 BAD_CREDS, 5 UNAUTHORIZED
   }
 }
 
@@ -1437,7 +1856,9 @@ void subscribeToControlTopics() {
   String sinifBase = String("akilli-sinif/") + CLASSROOM_ID;
   String topics[] = {
     buildTopic("control", "led"),
-    buildTopic("control", "fan"),
+    buildTopic("control", "cooling"),      // Cooling role (12V fan)
+    buildTopic("control", "heating"),      // Heating role (22ohm direnc)
+    buildTopic("control", "mode"),         // Auto/manual otomasyon mod
     buildTopic("control", "alert"),        // Gorsel uyari sistemi
     buildTopic("control", "all"),          // Toplu komutlar icin
     buildTopic("control", "ota"),          // OTA guncelleme komutu
@@ -1468,6 +1889,19 @@ void subscribeToControlTopics() {
 // ============================================
 // SENSOR FONKSIYONLARI
 // ============================================
+
+// LM358 cikisindaki ham ADC degerini akima (A) cevirir.
+// LM358 dusuk rail saturasyonu icin tek esikli iki bolgeli lineer fit.
+float rawToAmps(int raw) {
+  float a;
+  if (raw < CAL_THRESHOLD_RAW) {
+    a = CAL_LOW_SCALE_A * raw + CAL_LOW_OFFSET_A;
+  } else {
+    a = CAL_HIGH_SCALE_A * raw + CAL_HIGH_OFFSET_A;
+  }
+  if (a < 0.0f) a = 0.0f;
+  return a;
+}
 
 void readSensors() {
   if (MOCK_MODE) {
@@ -1519,6 +1953,14 @@ void readMockSensors() {
   if (random(0, 50) == 0) {
     windowOpen = !windowOpen;
   }
+
+  // Akim: 0.4 - 0.9A arasinda yavas dolasim
+  static float baseAmps = 0.63f;
+  baseAmps += (random(-30, 31) / 1000.0f);  // -0.03 ile +0.03 arasi
+  baseAmps = constrain(baseAmps, 0.40f, 0.90f);
+  currentAmps = baseAmps;
+  rawCurrent = (int)((currentAmps - CAL_HIGH_OFFSET_A) / CAL_HIGH_SCALE_A);
+  powerWatts = SUPPLY_VOLTAGE * currentAmps;
 }
 
 void readRealSensors() {
@@ -1544,12 +1986,25 @@ void readRealSensors() {
   lightLevel = map(rawLight, 0, 4095, 0, 1000);
   
   // ========== MQ-135 - Hava Kalitesi ==========
-  // MQ-135 isindiktan sonra (1-2 dakika) dogru deger verir
+  // MQ-135 isindiktan sonra (1-2 dakika) dogru deger verir.
+  // NOT: MQ-135 cikisi gaz konsantrasyonuyla LOGARITMIK iliskidedir.
+  // Asagidaki lineer map sadece TREND amaclidir, mutlak ppm degeri verir.
+  // Bitirme tezinde "kalibre edilmemis, gosterge amacli" olarak belirt.
   int rawAir = analogRead(PIN_MQ135);
-  // Ham degeri ppm'e yaklasik cevir
-  // Dusuk deger = temiz hava, yuksek deger = kirli hava
   airQuality = map(rawAir, 0, 4095, 0, 500);
-  
+
+  // ========== Shunt + LM358 - Akim ve Guc ==========
+  // 0.1 ohm shunt (low-side), LM358 evirici amp (gain ~20)
+  // 1.5A -> ~3.0V ADC. Piecewise-linear kalibrasyon ile A'ya cevriliyor.
+  // Dusuk sinyalde ADC gurultusu yuksek -> 16 ornek ortalama.
+  uint32_t adcSum = 0;
+  for (int i = 0; i < 16; i++) {
+    adcSum += analogRead(PIN_CURRENT);
+  }
+  rawCurrent = (int)(adcSum / 16);
+  currentAmps = rawToAmps(rawCurrent);
+  powerWatts = SUPPLY_VOLTAGE * currentAmps;
+
   // ========== PIR - Hareket Algilama ==========
   // HIGH = hareket var, LOW = hareket yok
   motionDetected = digitalRead(PIN_PIR) == HIGH;
@@ -1564,16 +2019,17 @@ void readRealSensors() {
 // ============================================
 
 void setupActuators() {
-  // ESP32 Arduino Core 3.x yeni PWM API
-  // ledcAttach(pin, freq, resolution) - kanal otomatik atanir
+  // LED: PWM dimming (ESP32 Core 3.x: ledcAttach kanal otomatik atar)
   ledcAttach(PIN_LED, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(PIN_FAN, PWM_FREQ, PWM_RESOLUTION);
-  
-  // Baslangicta tum aktuatorleri kapat
   setLedBrightness(0);
-  setFanSpeed(0);
-  
-  Serial.println("Aktuatorler hazir.");
+
+  // Cooling/Heating roleleri: digital ON/OFF, GUVENLI baslangic KAPALI
+  pinMode(PIN_COOLING, OUTPUT);
+  pinMode(PIN_HEATING, OUTPUT);
+  digitalWrite(PIN_COOLING, !RELAY_ACTIVE_LEVEL);
+  digitalWrite(PIN_HEATING, !RELAY_ACTIVE_LEVEL);
+
+  Serial.println("Aktuatorler hazir (LED PWM, cooling/heating role).");
 }
 
 void setupSensors() {
@@ -1593,8 +2049,13 @@ void setupSensors() {
   // LDR ve MQ-135 analog pinler - ayar gerekmez (analogRead otomatik)
   // Ancak ADC cozunurlugunu ayarlayabiliriz
   analogReadResolution(12);  // 12-bit (0-4095)
-  Serial.println("Analog sensorler (LDR, MQ-135) hazir");
-  
+  // Akim sensoru (LM358 cikisi) icin 0-3.3V tam aralik. Core 3.x'te default
+  // attenuation bazi surumlerde degisik geliyor, explicit set garanti.
+  analogSetPinAttenuation(PIN_CURRENT, ADC_11db);
+  analogSetPinAttenuation(PIN_LDR, ADC_11db);
+  analogSetPinAttenuation(PIN_MQ135, ADC_11db);
+  Serial.println("Analog sensorler (LDR, MQ-135, Current) hazir");
+
   Serial.println("Tum sensorler baslatildi.");
 }
 
@@ -1609,15 +2070,132 @@ void setLedBrightness(int percent) {
   publishActuatorStatus("led", ledBrightness);
 }
 
-void setFanSpeed(int percent) {
-  // Yuzdeyi 0-255 araligina cevir
-  percent = constrain(percent, 0, 100);
-  int pwmValue = map(percent, 0, 100, 0, 255);
-  ledcWrite(PIN_FAN, pwmValue);  // ESP32 Core 3.x: pin numarasi kullanilir
-  fanSpeed = percent;
-  
-  // Durum bilgisi yayinla
-  publishActuatorStatus("fan", fanSpeed);
+// Role durumu yayinla (cooling/heating ortak format: {state:"on"|"off"})
+// retained=true: broker son durumu tutar, dashboard ve ESP32 reboot sonrasi senkron.
+void publishRelayStatus(const char* actuator, bool on) {
+  StaticJsonDocument<96> doc;
+  doc["state"] = on ? "on" : "off";
+  doc["timestamp"] = millis();
+  String topic = buildTopic("status", actuator);
+  publishJson(topic, doc, true);
+}
+
+// Cooling role ON/OFF (BC337 + JRC-19F coil + 12V fan)
+void setCooling(bool on) {
+  digitalWrite(PIN_COOLING, on ? RELAY_ACTIVE_LEVEL : !RELAY_ACTIVE_LEVEL);
+  coolingOn = on;
+  Serial.print("[Role] cooling ");
+  Serial.println(on ? "ON" : "OFF");
+  publishRelayStatus("cooling", on);
+}
+
+// Heating role ON/OFF (BC337 + JRC-19F coil + 22ohm 5W direnc)
+void setHeating(bool on) {
+  digitalWrite(PIN_HEATING, on ? RELAY_ACTIVE_LEVEL : !RELAY_ACTIVE_LEVEL);
+  heatingOn = on;
+  Serial.print("[Role] heating ");
+  Serial.println(on ? "ON" : "OFF");
+  publishRelayStatus("heating", on);
+}
+
+// ============================================
+// FIZIKSEL DUVAR ANAHTARLARI (TOGGLE)
+// ============================================
+
+void toggleLed() {
+  if (ledBrightness > 0) {
+    lastLedBrightness = ledBrightness;  // mevcut parlakligi yedekle
+    setLedBrightness(0);
+    Serial.println("[Switch] LED -> OFF");
+  } else {
+    setLedBrightness(lastLedBrightness > 0 ? lastLedBrightness : 100);
+    Serial.print("[Switch] LED -> ON @");
+    Serial.print(ledBrightness);
+    Serial.println("%");
+  }
+}
+
+void toggleCooling() {
+  manualOverrideUntil = millis() + MANUAL_OVERRIDE_MS;  // ladder otomasyonu ezmesin
+  setCooling(!coolingOn);
+  Serial.print("[Switch] COOLING -> ");
+  Serial.println(coolingOn ? "ON" : "OFF");
+}
+
+void toggleHeating() {
+  manualOverrideUntil = millis() + MANUAL_OVERRIDE_MS;
+  setHeating(!heatingOn);
+  Serial.print("[Switch] HEATING -> ");
+  Serial.println(heatingOn ? "ON" : "OFF");
+}
+
+// Tek butonu polling + debounce ile oku. HIGH -> LOW gecisinde true doner (basma ani).
+bool pollToggleEdge(ToggleBtn& b) {
+  bool raw = digitalRead(b.pin);
+  unsigned long now = millis();
+  if (raw != b.lastReading) {
+    b.lastReading = raw;
+    b.lastChangeMs = now;
+    return false;
+  }
+  if ((now - b.lastChangeMs) < TOGGLE_DEBOUNCE_MS) return false;
+  if (raw == b.stable) return false;
+  bool edge = (b.stable == HIGH && raw == LOW);  // basma kenari
+  b.stable = raw;
+  return edge;
+}
+
+void updateToggleButtons() {
+  if (pollToggleEdge(btnLedTog))     toggleLed();
+  if (pollToggleEdge(btnCoolingTog)) toggleCooling();
+  if (pollToggleEdge(btnHeatingTog)) toggleHeating();
+}
+
+// Ladder otomasyon: sicaklik esikleri + pencere kilidi + manuel override
+// loop()'ta her sensor okumasindan sonra cagrilir.
+void runLadder() {
+  if (!autoMode) return;
+  if (millis() < manualOverrideUntil) return;  // manuel komut sonrasi 5 dk bypass
+
+  // Reed switch: HIGH = pencere acik (mıknatis uzak), LOW = kapali
+  bool windowOpen = (digitalRead(PIN_WINDOW) == HIGH);
+
+  // Pencere acikken ikisini de zorla KAPAT (enerji kacagi koruma)
+  if (windowOpen) {
+    if (coolingOn) setCooling(false);
+    if (heatingOn) setHeating(false);
+    return;
+  }
+
+  // Cooling: histeresis (>26 -> ON, <24 -> OFF). Heating ile karsilikli dislama.
+  if (!coolingOn && temperature > TEMP_COOL_ON && !heatingOn) {
+    setCooling(true);
+  } else if (coolingOn && temperature < TEMP_COOL_OFF) {
+    setCooling(false);
+  }
+
+  // Heating: histeresis (<20 -> ON, >22 -> OFF). Cooling ile karsilikli dislama.
+  if (!heatingOn && temperature < TEMP_HEAT_ON && !coolingOn) {
+    setHeating(true);
+  } else if (heatingOn && temperature > TEMP_HEAT_OFF) {
+    setHeating(false);
+  }
+}
+
+// MQTT control payload'undan on/off ayikla. {"state":"on"/"off"} veya {"state":true/false}
+bool parseOnOff(JsonDocument& doc, bool& out) {
+  if (!doc.containsKey("state")) return false;
+  if (doc["state"].is<const char*>()) {
+    const char* s = doc["state"];
+    if (strcmp(s, "on")  == 0) { out = true;  return true; }
+    if (strcmp(s, "off") == 0) { out = false; return true; }
+    return false;
+  }
+  if (doc["state"].is<bool>()) {
+    out = doc["state"].as<bool>();
+    return true;
+  }
+  return false;
 }
 
 // ============================================
@@ -1666,7 +2244,22 @@ void publishSensorData() {
   windowDoc["open"] = windowOpen;
   windowDoc["timestamp"] = millis();
   publishJson(buildTopic("sensors", "window"), windowDoc);
-  
+
+  // Akim (mA)
+  StaticJsonDocument<128> currDoc;
+  currDoc["value"] = currentAmps * 1000.0f;
+  currDoc["raw"] = rawCurrent;
+  currDoc["unit"] = "mA";
+  currDoc["timestamp"] = millis();
+  publishJson(buildTopic("sensors", "current"), currDoc);
+
+  // Guc (W)
+  StaticJsonDocument<128> pwrDoc;
+  pwrDoc["value"] = powerWatts;
+  pwrDoc["unit"] = "W";
+  pwrDoc["timestamp"] = millis();
+  publishJson(buildTopic("sensors", "power"), pwrDoc);
+
   // Serial'a ozet yazdir
   Serial.println("--- Sensor Verileri Yayinlandi ---");
   Serial.print("Sicaklik: ");
@@ -1682,17 +2275,26 @@ void publishSensorData() {
   Serial.print(" | Pencere: ");
   Serial.print(windowOpen ? "ACIK" : "KAPALI");
   Serial.print(" | Kisi: ");
-  Serial.println(personCount);
+  Serial.print(personCount);
+  Serial.print(" | Akim: ");
+  Serial.print(currentAmps * 1000.0f, 0);
+  Serial.print(" mA (raw=");
+  Serial.print(rawCurrent);
+  Serial.print(", ~");
+  Serial.print(rawCurrent * 3.3f / 4095.0f, 3);
+  Serial.print("V) | Guc: ");
+  Serial.print(powerWatts, 2);
+  Serial.println(" W");
 }
 
 void publishActuatorStatus(const char* actuator, int value) {
   StaticJsonDocument<128> doc;
-  doc["value"] = value;
+  doc["brightness"] = value;
   doc["unit"] = "%";
   doc["timestamp"] = millis();
-  
-  String topic = buildTopic("actuators", actuator);
-  publishJson(topic, doc);
+
+  String topic = buildTopic("status", actuator);
+  publishJson(topic, doc, true);  // retained: dashboard ve reboot sonrasi son durum senkron
 }
 
 void publishStatus(const char* status) {
@@ -1809,9 +2411,16 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
+  // BOOT (GPIO0) 5 sn basili -> TFT countdown + WiFi portal acmak icin restart
+  checkRuntimePortalRequest();
+
   // Menu butonlari + otomatik sayfa cevrimi (her iterasyonda, gecikmesiz)
   pollButtons();
+  processButtonEvents();
   handleAutoRotate();
+
+  // Fiziksel duvar anahtarlari (LED/Cooling/Heating toggle)
+  updateToggleButtons();
 
   // WiFi kontrolu
   if (currentMillis - lastWifiCheck >= WIFI_CHECK_INTERVAL) {
@@ -1823,18 +2432,20 @@ void loop() {
   if (!mqttClient.connected()) {
     mqttConnected = false;
 
-    // Cok hizli deneme yapmayi onle - 5 saniye bekle
-    if (currentMillis - lastMqttReconnectAttempt >= MQTT_RECONNECT_INTERVAL) {
+    // WiFi yoksa MQTT denemeye gerek yok (bos yere socket timeout bekletmesin)
+    if (WiFi.status() == WL_CONNECTED &&
+        currentMillis - lastMqttReconnectAttempt >= MQTT_RECONNECT_INTERVAL) {
       lastMqttReconnectAttempt = currentMillis;
       connectMQTT();
     }
   }
   mqttClient.loop();  // Gelen mesajlari isle
   
-  // Sensor okuma
+  // Sensor okuma + ladder otomasyon (sicaklik+pencere -> cooling/heating)
   if (currentMillis - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = currentMillis;
     readSensors();
+    runLadder();
   }
   
   // MQTT yayinlama
@@ -1853,10 +2464,10 @@ void loop() {
     }
   }
   
-  // Ekran guncellemesi
+  // Ekran guncellemesi (BOOT countdown ekranini bozmamak icin gate'li)
   if (currentMillis - lastDisplayUpdate >= DISPLAY_INTERVAL) {
     lastDisplayUpdate = currentMillis;
-    updateDisplay();
+    if (!bootCountdownActive) updateDisplay();
     checkAutoAlerts();  // Otomatik uyari kontrolu
   }
   

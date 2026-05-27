@@ -3,7 +3,7 @@
 //
 //   Bu dosya ESP32 DevKit V1 ve 1.44" ST7735 TFT ekran icin ozellestirilmistir.
 //   Pin baglantiları:
-//     TFT_CS   = GPIO 15
+//     TFT_CS   = GPIO 17
 //     TFT_DC   = GPIO 33  (A0/RS)
 //     TFT_RST  = GPIO 32
 //     TFT_MOSI = GPIO 23  (SDA)
@@ -53,7 +53,7 @@
 #define TFT_MISO  -1
 #define TFT_MOSI  23
 #define TFT_SCLK  18
-#define TFT_CS    15
+#define TFT_CS    17
 #define TFT_DC    33
 #define TFT_RST   32
 
@@ -79,5 +79,5 @@
 //
 // ##################################################################################
 
-#define SPI_FREQUENCY  20000000
-#define SPI_READ_FREQUENCY  10000000
+#define SPI_FREQUENCY  4000000
+#define SPI_READ_FREQUENCY  2000000
