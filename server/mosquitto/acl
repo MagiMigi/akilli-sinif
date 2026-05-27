@@ -29,11 +29,32 @@ topic read  akilli-sinif/all/control/#
 topic read  akilli-sinif/+/schedule/#
 topic read  akilli-sinif/+/announcements
 
+# Relay-Test alt-projesi (esp32-relay-test cihazlari)
+topic write akilli-sinif/relay-test/+/status/#
+topic read  akilli-sinif/relay-test/+/control/#
+topic read  akilli-sinif/relay-test/all/control/#
+
 # -----------------------------------------------------------------
 # nodered — Node-RED ve YOLO sunucusu (tam yetki)
 # -----------------------------------------------------------------
 user nodered
 topic readwrite akilli-sinif/#
+
+# -----------------------------------------------------------------
+# mobile — Android mobil uygulama
+# -----------------------------------------------------------------
+# Sensor/status okur, control komutu yazar. OTA/reset broadcast yetkili.
+user mobile
+topic read  akilli-sinif/+/sensors/#
+topic read  akilli-sinif/+/status/#
+topic read  akilli-sinif/+/actuators/#
+topic write akilli-sinif/+/control/#
+topic write akilli-sinif/all/control/#
+
+# Relay-Test alt-projesi
+topic read  akilli-sinif/relay-test/+/status/#
+topic write akilli-sinif/relay-test/+/control/#
+topic write akilli-sinif/relay-test/all/control/#
 
 # -----------------------------------------------------------------
 # Anonim — kapali (mosquitto.conf: allow_anonymous false)

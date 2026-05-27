@@ -574,7 +574,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "targets": [
         {
@@ -601,9 +601,9 @@
               { "color": "blue", "value": 1 }
             ]
           },
-          "max": 100,
+          "max": 1,
           "min": 0,
-          "unit": "percent"
+          "unit": "none"
         },
         "overrides": []
       },
@@ -615,16 +615,57 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"fan_status\")\n  |> filter(fn: (r) => r._field == \"speed\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"cooling_status\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()",
           "refId": "A"
         }
       ],
-      "title": "🌀 Fan Durumu",
+      "title": "❄️ Cooling (Soğutma)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "dark-red", "index": 0, "text": "KAPALI" }, "1": { "color": "red", "index": 1, "text": "AÇIK" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-red", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 32 },
+      "id": 30,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"heating_status\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🔥 Heating (Isıtma)",
       "type": "stat"
     },
     {
@@ -644,7 +685,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 32 },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 32 },
       "id": 24,
       "options": {
         "colorMode": "background",
@@ -657,7 +698,7 @@
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"automation_event\")\n  |> filter(fn: (r) => r._field == \"reason\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"automation_event\")\n  |> filter(fn: (r) => r._field == \"reason\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -702,7 +743,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "targets": [
         {
@@ -746,7 +787,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "targets": [
         {
@@ -786,7 +827,7 @@
         "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "targets": [
         {
@@ -956,6 +997,176 @@
       ],
       "title": "⏱️ Uptime",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 },
+      "id": 50,
+      "panels": [],
+      "title": "⚡ Güç & Akım Ölçümü",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 1500,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 800 },
+              { "color": "orange", "value": 1100 },
+              { "color": "red", "value": 1400 }
+            ]
+          },
+          "unit": "mamp"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 47 },
+      "id": 51,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"current\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🔌 Anlık Akım",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 18,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 9 },
+              { "color": "orange", "value": 13 },
+              { "color": "red", "value": 16 }
+            ]
+          },
+          "unit": "watt"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 47 },
+      "id": 52,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"power\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "⚡ Anlık Güç",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 47 },
+      "id": 53,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"current\")\n  |> filter(fn: (r) => r._field == \"raw\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "🔧 Ham ADC (kalibrasyon)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "mappings": [],
+          "unit": "mamp"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "B" },
+            "properties": [
+              { "id": "unit", "value": "watt" },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 53 },
+      "id": 54,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"current\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "ffgfokah0gqv4c" },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"power\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "refId": "B"
+        }
+      ],
+      "title": "📈 Akım & Güç Trendi",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

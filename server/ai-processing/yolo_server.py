@@ -17,7 +17,10 @@ Gereksinimler:
 """
 
 import os
+import re
 import sys
+import signal
+import hmac
 import json
 import time
 import logging
@@ -28,6 +31,9 @@ from functools import wraps
 from flask import Flask, request, jsonify
 from PIL import Image
 import numpy as np
+
+# GUVENLIK: PIL decompression-bomb DoS limiti (150 MP)
+Image.MAX_IMAGE_PIXELS = 150_000_000
 
 # .env dosyasından ayarları yükle
 try:
@@ -113,11 +119,22 @@ logger = logging.getLogger(__name__)
 # ============================================
 
 app = Flask(__name__)
+# GUVENLIK: max body 8 MB — buyuk POST'lar memory DoS engeli
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
 
 # Global değişkenler
 model = None
 mqtt_client = None
 last_person_count = {}  # Her sınıf için son kişi sayısı
+
+# GUVENLIK: classroom_id whitelist — path traversal + topic-injection korumasi
+_CLASSROOM_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,32}$')
+
+def safe_classroom_id(raw: str) -> str:
+    """Header'dan gelen classroom_id'yi dogrula. Gecersizse 'invalid' dondur."""
+    if raw and _CLASSROOM_ID_RE.match(raw):
+        return raw
+    return "invalid"
 
 # ============================================
 # AUTH
@@ -132,7 +149,8 @@ def require_api_key(f):
     def decorated(*args, **kwargs):
         # API_KEY startup'ta zorunlu kilindi — bos olamaz.
         key = request.headers.get("X-API-Key", "")
-        if key != API_KEY:
+        # GUVENLIK: timing-safe karsilastirma (hmac.compare_digest)
+        if not hmac.compare_digest(key, API_KEY):
             logger.warning(f"Yetkisiz erişim denemesi: {request.remote_addr}")
             return jsonify({"error": "Yetkisiz erişim"}), 401
         return f(*args, **kwargs)
@@ -379,10 +397,18 @@ def save_image(image, classroom_id):
 
 @app.route('/', methods=['GET'])
 def index():
-    """Ana sayfa - sunucu durumu"""
+    """Ana sayfa - minimal durum (yetkisiz info-leak engeli)"""
+    # Detaylar (model path, mqtt durumu, son sayilar) artik auth'lu /status'ta.
     return jsonify({
         "service": "Akıllı Sınıf - YOLO Kişi Sayma Sunucusu",
-        "status": "running",
+        "status": "running"
+    })
+
+@app.route('/status', methods=['GET'])
+@require_api_key
+def status():
+    """Detayli sunucu durumu (auth gerekir)"""
+    return jsonify({
         "yolo_model": MODEL_PATH if model else "not loaded",
         "mqtt_connected": mqtt_client.is_connected() if mqtt_client else False,
         "last_counts": last_person_count
@@ -402,9 +428,9 @@ def analyze():
         JPEG görüntü verisi
     """
     try:
-        # Sınıf ID'sini al
-        classroom_id = request.headers.get('X-Classroom-ID', 'sinif-1')
-        
+        # GUVENLIK: classroom_id'yi whitelist ile dogrula (path traversal korumasi)
+        classroom_id = safe_classroom_id(request.headers.get('X-Classroom-ID', 'sinif-1'))
+
         # Görüntü verisini al
         if request.content_type != 'image/jpeg':
             logger.warning(f"Geçersiz content-type: {request.content_type}")
@@ -458,8 +484,11 @@ def test():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/count/<classroom_id>', methods=['GET'])
+@require_api_key
 def get_count(classroom_id):
-    """Son kişi sayısını döndür"""
+    """Son kişi sayısını döndür (auth gerekir)"""
+    # GUVENLIK: URL parametresini de whitelist ile dogrula
+    classroom_id = safe_classroom_id(classroom_id)
     count = last_person_count.get(classroom_id, 0)
     return jsonify({
         "classroom_id": classroom_id,
@@ -471,26 +500,50 @@ def get_count(classroom_id):
 # ANA PROGRAM
 # ============================================
 
+def shutdown(signum, _frame):
+    """SIGTERM/SIGINT — MQTT thread'ini temiz kapat, sonra cik."""
+    logger.info(f"Sinyal {signum} alindi, kapatiliyor...")
+    global mqtt_client
+    if mqtt_client is not None:
+        try:
+            mqtt_client.loop_stop()
+            mqtt_client.disconnect()
+            logger.info("MQTT baglantisi temiz kapatildi.")
+        except Exception as e:
+            logger.warning(f"MQTT shutdown hatasi (yok sayildi): {e}")
+    sys.exit(0)
+
+
 def main():
     """Ana program"""
     logger.info("=" * 50)
     logger.info("Akıllı Sınıf - YOLO Kişi Sayma Sunucusu")
     logger.info("=" * 50)
-    
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
     # YOLO modelini yükle
     if not load_model():
         logger.warning("YOLO modeli yüklenemedi, mock mod kullanılacak")
-    
+
     # MQTT bağlantısını kur
     if not setup_mqtt():
         logger.warning("MQTT bağlantısı kurulamadı")
     
-    # Flask sunucusunu başlat
-    logger.info(f"Sunucu başlatılıyor: http://{HOST}:{PORT}")
+    # Flask sunucusunu başlat — opsiyonel TLS:
+    # YOLO_TLS_CERT ve YOLO_TLS_KEY env değişkenleri set ise HTTPS,
+    # aksi halde geriye dönük uyumlu plain HTTP.
+    tls_cert = os.getenv("YOLO_TLS_CERT")
+    tls_key = os.getenv("YOLO_TLS_KEY")
+    ssl_context = (tls_cert, tls_key) if tls_cert and tls_key else None
+    scheme = "https" if ssl_context else "http"
+
+    logger.info(f"Sunucu başlatılıyor: {scheme}://{HOST}:{PORT}")
     logger.info("ESP32-CAM görüntülerini bekleniyor...")
     logger.info("-" * 50)
-    
-    app.run(host=HOST, port=PORT, debug=DEBUG, threaded=True)
+
+    app.run(host=HOST, port=PORT, debug=DEBUG, threaded=True, ssl_context=ssl_context)
 
 if __name__ == '__main__':
     main()

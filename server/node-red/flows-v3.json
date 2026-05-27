@@ -108,7 +108,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "InfluxDB Format",
-        "func": "// Topic: akilli-sinif/sinif-1/sensors/temperature\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];  // sinif-1\nvar sensorType = parts[3];   // temperature, humidity, camera, etc.\n\n// Sensör tipine göre field adını belirle\nvar fieldName = \"value\";\nvar fieldValue = msg.payload.value;\n\n// Boolean sensörler için özel işlem\nif (sensorType === \"pir\") {\n    fieldName = \"detected\";\n    fieldValue = msg.payload.detected ? 1 : 0;\n} else if (sensorType === \"window\") {\n    fieldName = \"open\";\n    fieldValue = msg.payload.open ? 1 : 0;\n} else if (sensorType === \"camera\") {\n    fieldName = \"person_count\";\n    fieldValue = msg.payload.person_count || 0;\n}\n\n// InfluxDB v2 için mesajı hazırla\nmsg.measurement = sensorType;\nvar fields = {};\nfields[fieldName] = fieldValue;\nvar tags = {\n    classroom: classroomId,\n    sensor: sensorType\n};\nmsg.payload = [fields, tags];\n\nreturn msg;",
+        "func": "// Topic: akilli-sinif/sinif-1/sensors/temperature\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];  // sinif-1\nvar sensorType = parts[3];   // temperature, humidity, camera, etc.\n\n// Sensör tipine göre field adını belirle\nvar fieldName = \"value\";\nvar fieldValue = msg.payload.value;\n\n// Boolean sensörler için özel işlem\nif (sensorType === \"pir\") {\n    fieldName = \"detected\";\n    fieldValue = msg.payload.detected ? 1 : 0;\n} else if (sensorType === \"window\") {\n    fieldName = \"open\";\n    fieldValue = msg.payload.open ? 1 : 0;\n} else if (sensorType === \"camera\") {\n    fieldName = \"person_count\";\n    fieldValue = msg.payload.person_count || 0;\n}\n\n// InfluxDB v2 için mesajı hazırla\nmsg.measurement = sensorType;\nvar fields = {};\nfields[fieldName] = fieldValue;\n\n// Akim sensoru icin ham ADC degerini de kaydet (kalibrasyon icin)\nif (sensorType === \"current\" && msg.payload.raw !== undefined) {\n    fields.raw = msg.payload.raw;\n}\n\nvar tags = {\n    classroom: classroomId,\n    sensor: sensorType\n};\nmsg.payload = [fields, tags];\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -187,7 +187,7 @@
         "type": "comment",
         "z": "akilli-sinif-flow",
         "name": "🤖 OTOMASYON KURALLARI",
-        "info": "Sınıf boşken LED/Fan kapat\nSınıf doluyken ortam koşullarına göre ayarla",
+        "info": "Sınıf boşken LED + Cooling + Heating kapat\nSınıf doluyken ortam koşullarına göre ayarla",
         "x": 160,
         "y": 280,
         "wires": []
@@ -197,7 +197,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "Otomasyon Router",
-        "func": "// Topic'e göre sensör verilerini global context'e kaydet\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar sensorType = parts[3];\n\n// Global context key\nvar key = classroomId + '_' + sensorType;\n\n// Sensör değerini kaydet\nif (sensorType === 'camera') {\n    global.set(classroomId + '_person_count', msg.payload.person_count || 0);\n    return [msg, null, null];  // Output 1: Kişi sayısı değişti\n} else if (sensorType === 'temperature') {\n    global.set(classroomId + '_temperature', msg.payload.value);\n    return [null, msg, null];  // Output 2: Sıcaklık değişti\n} else if (sensorType === 'light') {\n    global.set(classroomId + '_light', msg.payload.value);\n    return [null, null, msg];  // Output 3: Işık değişti\n}\n\nreturn null;",
+        "func": "// Topic'e göre sensör verilerini global context'e kaydet\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar sensorType = parts[3];\n\n// Global context key\nvar key = classroomId + '_' + sensorType;\n\n// Sensör değerini kaydet\nif (sensorType === 'camera') {\n    global.set(classroomId + '_person_count', msg.payload.person_count || 0);\n    return [msg, null, null];  // Output 1: Kişi sayısı değişti\n} else if (sensorType === 'temperature') {\n    global.set(classroomId + '_temperature', msg.payload.value);\n    return [null, msg, null];  // Output 2: Sıcaklık değişti\n} else if (sensorType === 'light') {\n    global.set(classroomId + '_light', msg.payload.value);\n    return [null, null, msg];  // Output 3: Işık değişti\n} else if (sensorType === 'pir') {\n    // PIR durumu sadece global context'e kaydedilir.\n    // check-light bir sonraki ışık okumasında bu değeri kullanır.\n    global.set(classroomId + '_pir_detected', msg.payload.detected || false);\n}\n\nreturn null;",
         "outputs": 3,
         "timeout": "",
         "noerr": 0,
@@ -223,7 +223,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "Sınıf Boş mu?",
-        "func": "// Kişi sayısı değiştiğinde kontrol et\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar personCount = msg.payload.person_count || 0;\n\n// Otomasyon durumunu kontrol et\nvar autoMode = global.get(classroomId + '_auto_mode');\nif (autoMode === false) {\n    // Manuel mod, otomasyon kapalı\n    return null;\n}\n\nif (personCount === 0) {\n    // Sınıf boş - timer başlat\n    var emptyTimer = global.get(classroomId + '_empty_timer');\n    \n    if (!emptyTimer) {\n        // İlk kez boş, timestamp kaydet\n        global.set(classroomId + '_empty_since', Date.now());\n        global.set(classroomId + '_empty_timer', true);\n        node.status({fill:'yellow', shape:'ring', text:'Sınıf boş, bekleniyor...'});\n    }\n    \n    // 5 dakika (300000 ms) geçti mi?\n    var emptySince = global.get(classroomId + '_empty_since');\n    var elapsed = Date.now() - emptySince;\n    \n    if (elapsed >= 300000) {  // 5 dakika\n        // LED ve Fan'ı kapat\n        node.status({fill:'red', shape:'dot', text:'5 dk boş - Kapatılıyor'});\n        \n        msg.classroomId = classroomId;\n        msg.action = 'turn_off_all';\n        return msg;\n    }\n} else {\n    // Sınıfta kişi var - timer'ı sıfırla\n    global.set(classroomId + '_empty_timer', false);\n    global.set(classroomId + '_empty_since', null);\n    node.status({fill:'green', shape:'dot', text:personCount + ' kişi var'});\n}\n\nreturn null;",
+        "func": "// Kişi sayısı değiştiğinde kontrol et\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar personCount = msg.payload.person_count || 0;\n\nvar autoMode = global.get(classroomId + '_auto_mode');\nif (autoMode === false) {\n    return null;\n}\n\nif (personCount === 0) {\n    var emptyTimer = global.get(classroomId + '_empty_timer');\n    \n    if (!emptyTimer) {\n        global.set(classroomId + '_empty_since', Date.now());\n        global.set(classroomId + '_empty_timer', true);\n        node.status({fill:'yellow', shape:'ring', text:'Sınıf boş, bekleniyor...'});\n    }\n    \n    var emptySince = global.get(classroomId + '_empty_since');\n    var elapsed = Date.now() - emptySince;\n    \n    if (elapsed >= 300000) {  // 5 dakika\n        // LED + Cooling + Heating kapat\n        node.status({fill:'red', shape:'dot', text:'5 dk boş - Kapatılıyor'});\n        \n        msg.classroomId = classroomId;\n        msg.action = 'turn_off_all';\n        return msg;\n    }\n} else {\n    global.set(classroomId + '_empty_timer', false);\n    global.set(classroomId + '_empty_since', null);\n    node.status({fill:'green', shape:'dot', text:personCount + ' kişi var'});\n}\n\nreturn null;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -242,9 +242,9 @@
         "id": "turn-off-all",
         "type": "function",
         "z": "akilli-sinif-flow",
-        "name": "LED + Fan Kapat",
-        "func": "var classroomId = msg.classroomId || 'sinif-1';\n\n// LED kapat\nvar ledMsg = {\n    topic: 'akilli-sinif/' + classroomId + '/control/led',\n    payload: { brightness: 0, reason: 'auto_empty' }\n};\n\n// Fan kapat\nvar fanMsg = {\n    topic: 'akilli-sinif/' + classroomId + '/control/fan',\n    payload: { speed: 0, reason: 'auto_empty' }\n};\n\nnode.status({fill:'red', shape:'dot', text:'LED+Fan kapatıldı'});\n\nreturn [ledMsg, fanMsg];",
-        "outputs": 2,
+        "name": "LED + Cooling + Heating Kapat",
+        "func": "var classroomId = msg.classroomId || 'sinif-1';\n\nvar ledMsg = {\n    topic: 'akilli-sinif/' + classroomId + '/control/led',\n    payload: { brightness: 0, reason: 'auto_empty' }\n};\n\nvar coolingMsg = {\n    topic: 'akilli-sinif/' + classroomId + '/control/cooling',\n    payload: { state: 'off', reason: 'auto_empty' }\n};\n\nvar heatingMsg = {\n    topic: 'akilli-sinif/' + classroomId + '/control/heating',\n    payload: { state: 'off', reason: 'auto_empty' }\n};\n\nnode.status({fill:'red', shape:'dot', text:'LED+Cooling+Heating kapatıldı'});\n\nreturn [ledMsg, coolingMsg, heatingMsg];",
+        "outputs": 3,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -257,7 +257,10 @@
                 "mqtt-led-auto"
             ],
             [
-                "mqtt-fan-auto"
+                "mqtt-cooling-auto"
+            ],
+            [
+                "mqtt-heating-auto"
             ]
         ]
     },
@@ -265,9 +268,9 @@
         "id": "check-temperature",
         "type": "function",
         "z": "akilli-sinif-flow",
-        "name": "Sıcaklık Kontrolü",
-        "func": "// Sıcaklık değiştiğinde kontrol et\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar temperature = msg.payload.value;\n\n// Sınıfta kişi var mı kontrol et\nvar personCount = global.get(classroomId + '_person_count') || 0;\n\n// Otomasyon durumunu kontrol et\nvar autoMode = global.get(classroomId + '_auto_mode');\nif (autoMode === false || personCount === 0) {\n    return null;  // Manuel mod veya sınıf boş\n}\n\n// Sıcaklık eşikleri\nvar FAN_ON_THRESHOLD = 26;   // 26°C üstünde fan aç\nvar FAN_OFF_THRESHOLD = 24;  // 24°C altında fan kapat\n\nvar currentFanState = global.get(classroomId + '_fan_auto_state') || false;\n\nif (temperature > FAN_ON_THRESHOLD && !currentFanState) {\n    // Sıcak - Fan aç\n    global.set(classroomId + '_fan_auto_state', true);\n    node.status({fill:'orange', shape:'dot', text:temperature + '°C - Fan açılıyor'});\n    \n    // Fan hızını sıcaklığa göre ayarla\n    var fanSpeed = 50;\n    if (temperature > 28) fanSpeed = 75;\n    if (temperature > 30) fanSpeed = 100;\n    \n    msg.topic = 'akilli-sinif/' + classroomId + '/control/fan';\n    msg.payload = { speed: fanSpeed, reason: 'auto_temp' };\n    return msg;\n    \n} else if (temperature < FAN_OFF_THRESHOLD && currentFanState) {\n    // Serin - Fan kapat\n    global.set(classroomId + '_fan_auto_state', false);\n    node.status({fill:'blue', shape:'dot', text:temperature + '°C - Fan kapatılıyor'});\n    \n    msg.topic = 'akilli-sinif/' + classroomId + '/control/fan';\n    msg.payload = { speed: 0, reason: 'auto_temp' };\n    return msg;\n}\n\nnode.status({fill:'grey', shape:'ring', text:temperature + '°C'});\nreturn null;",
-        "outputs": 1,
+        "name": "Sıcaklık Kontrolü (Cooling+Heating)",
+        "func": "// Sıcaklık değiştiğinde cooling ve heating histeresisini değerlendir\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar temperature = msg.payload.value;\n\nvar personCount = global.get(classroomId + '_person_count') || 0;\nvar autoMode = global.get(classroomId + '_auto_mode');\nif (autoMode === false || personCount === 0) {\n    return null;  // Manuel mod veya sınıf boş — otomasyon devre dışı\n}\n\n// PLC firmware ile aynı eşikler\nvar COOL_ON = 26;   // > 26°C  -> cooling ON\nvar COOL_OFF = 24;  // < 24°C  -> cooling OFF\nvar HEAT_ON = 20;   // < 20°C  -> heating ON\nvar HEAT_OFF = 22;  // > 22°C  -> heating OFF\n\nvar coolState = global.get(classroomId + '_cooling_auto_state') || false;\nvar heatState = global.get(classroomId + '_heating_auto_state') || false;\n\nvar coolingMsg = null;\nvar heatingMsg = null;\n\nif (temperature > COOL_ON && !coolState) {\n    global.set(classroomId + '_cooling_auto_state', true);\n    coolingMsg = {\n        topic: 'akilli-sinif/' + classroomId + '/control/cooling',\n        payload: { state: 'on', reason: 'auto_temp' }\n    };\n} else if (temperature < COOL_OFF && coolState) {\n    global.set(classroomId + '_cooling_auto_state', false);\n    coolingMsg = {\n        topic: 'akilli-sinif/' + classroomId + '/control/cooling',\n        payload: { state: 'off', reason: 'auto_temp' }\n    };\n}\n\nif (temperature < HEAT_ON && !heatState) {\n    global.set(classroomId + '_heating_auto_state', true);\n    heatingMsg = {\n        topic: 'akilli-sinif/' + classroomId + '/control/heating',\n        payload: { state: 'on', reason: 'auto_temp' }\n    };\n} else if (temperature > HEAT_OFF && heatState) {\n    global.set(classroomId + '_heating_auto_state', false);\n    heatingMsg = {\n        topic: 'akilli-sinif/' + classroomId + '/control/heating',\n        payload: { state: 'off', reason: 'auto_temp' }\n    };\n}\n\nvar label = temperature + '°C';\nif (coolingMsg) label += ' cool=' + coolingMsg.payload.state;\nif (heatingMsg) label += ' heat=' + heatingMsg.payload.state;\nnode.status({fill: (coolingMsg||heatingMsg)?'orange':'grey', shape: 'dot', text: label});\n\nreturn [coolingMsg, heatingMsg];",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -277,7 +280,10 @@
         "y": 320,
         "wires": [
             [
-                "mqtt-fan-auto"
+                "mqtt-cooling-auto"
+            ],
+            [
+                "mqtt-heating-auto"
             ]
         ]
     },
@@ -286,7 +292,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "Işık Kontrolü",
-        "func": "// Işık seviyesi değiştiğinde kontrol et\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar lightLevel = msg.payload.value;\n\n// Sınıfta kişi var mı kontrol et\nvar personCount = global.get(classroomId + '_person_count') || 0;\n\n// Otomasyon durumunu kontrol et\nvar autoMode = global.get(classroomId + '_auto_mode');\nif (autoMode === false || personCount === 0) {\n    return null;  // Manuel mod veya sınıf boş\n}\n\n// Işık eşikleri\nvar LED_ON_THRESHOLD = 300;   // 300 lux altında LED aç\nvar LED_OFF_THRESHOLD = 500;  // 500 lux üstünde LED kapat\n\nvar currentLedState = global.get(classroomId + '_led_auto_state') || false;\n\nif (lightLevel < LED_ON_THRESHOLD && !currentLedState) {\n    // Karanlık - LED aç\n    global.set(classroomId + '_led_auto_state', true);\n    node.status({fill:'yellow', shape:'dot', text:lightLevel + ' lux - LED açılıyor'});\n    \n    // LED parlaklığını ışık seviyesine göre ayarla\n    var ledBrightness = 100;\n    if (lightLevel > 200) ledBrightness = 75;\n    if (lightLevel > 250) ledBrightness = 50;\n    \n    msg.topic = 'akilli-sinif/' + classroomId + '/control/led';\n    msg.payload = { brightness: ledBrightness, reason: 'auto_light' };\n    return msg;\n    \n} else if (lightLevel > LED_OFF_THRESHOLD && currentLedState) {\n    // Aydınlık - LED kapat\n    global.set(classroomId + '_led_auto_state', false);\n    node.status({fill:'green', shape:'dot', text:lightLevel + ' lux - LED kapatılıyor'});\n    \n    msg.topic = 'akilli-sinif/' + classroomId + '/control/led';\n    msg.payload = { brightness: 0, reason: 'auto_light' };\n    return msg;\n}\n\nnode.status({fill:'grey', shape:'ring', text:lightLevel + ' lux'});\nreturn null;",
+        "func": "// Işık seviyesi değiştiğinde kontrol et\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar lightLevel = msg.payload.value;\n\n// Varlık tespiti: PIR (donanım, hareket) OR YOLO (görsel, sabit kişi)\n// İkisi birbirini tamamlar — PIR ölü açıda YOLO yedek, YOLO offline'da PIR yedek.\nvar personCount = global.get(classroomId + '_person_count') || 0;\nvar motionDetected = global.get(classroomId + '_pir_detected') || false;\nvar presence = motionDetected || personCount > 0;\n\n// Otomasyon durumunu kontrol et\nvar autoMode = global.get(classroomId + '_auto_mode');\nif (autoMode === false || !presence) {\n    return null;  // Manuel mod veya sınıf gerçekten boş\n}\n\n// Işık eşikleri\nvar LED_ON_THRESHOLD = 300;   // 300 lux altında LED aç\nvar LED_OFF_THRESHOLD = 500;  // 500 lux üstünde LED kapat\n\nvar currentLedState = global.get(classroomId + '_led_auto_state') || false;\n\nif (lightLevel < LED_ON_THRESHOLD && !currentLedState) {\n    // Karanlık - LED aç\n    global.set(classroomId + '_led_auto_state', true);\n    node.status({fill:'yellow', shape:'dot', text:lightLevel + ' lux - LED açılıyor'});\n    \n    // LED parlaklığını ışık seviyesine göre ayarla\n    var ledBrightness = 100;\n    if (lightLevel > 200) ledBrightness = 75;\n    if (lightLevel > 250) ledBrightness = 50;\n    \n    msg.topic = 'akilli-sinif/' + classroomId + '/control/led';\n    msg.payload = { brightness: ledBrightness, reason: 'auto_light' };\n    return msg;\n    \n} else if (lightLevel > LED_OFF_THRESHOLD && currentLedState) {\n    // Aydınlık - LED kapat\n    global.set(classroomId + '_led_auto_state', false);\n    node.status({fill:'green', shape:'dot', text:lightLevel + ' lux - LED kapatılıyor'});\n    \n    msg.topic = 'akilli-sinif/' + classroomId + '/control/led';\n    msg.payload = { brightness: 0, reason: 'auto_light' };\n    return msg;\n}\n\nnode.status({fill:'grey', shape:'ring', text:lightLevel + ' lux'});\nreturn null;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -324,10 +330,10 @@
         ]
     },
     {
-        "id": "mqtt-fan-auto",
+        "id": "mqtt-cooling-auto",
         "type": "mqtt out",
         "z": "akilli-sinif-flow",
-        "name": "Fan Auto Control",
+        "name": "Cooling Auto Control",
         "topic": "",
         "qos": "1",
         "retain": "false",
@@ -339,6 +345,28 @@
         "broker": "mqtt-broker-config",
         "x": 830,
         "y": 380,
+        "wires": [
+            [
+                "log-automation-event"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-heating-auto",
+        "type": "mqtt out",
+        "z": "akilli-sinif-flow",
+        "name": "Heating Auto Control",
+        "topic": "",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt-broker-config",
+        "x": 830,
+        "y": 420,
         "wires": [
             [
                 "log-automation-event"
@@ -498,10 +526,10 @@
         "wires": []
     },
     {
-        "id": "inject-fan-on",
+        "id": "inject-cooling-on",
         "type": "inject",
         "z": "akilli-sinif-flow",
-        "name": "Fan %100",
+        "name": "Cooling AÇ",
         "props": [
             {
                 "p": "payload"
@@ -512,21 +540,21 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "",
-        "payload": "{\"speed\":100}",
+        "payload": "{\"state\":\"on\"}",
         "payloadType": "json",
         "x": 120,
         "y": 620,
         "wires": [
             [
-                "mqtt-fan-control"
+                "mqtt-cooling-control"
             ]
         ]
     },
     {
-        "id": "inject-fan-off",
+        "id": "inject-cooling-off",
         "type": "inject",
         "z": "akilli-sinif-flow",
-        "name": "Fan Kapat",
+        "name": "Cooling Kapat",
         "props": [
             {
                 "p": "payload"
@@ -543,16 +571,16 @@
         "y": 660,
         "wires": [
             [
-                "mqtt-fan-control"
+                "mqtt-cooling-control"
             ]
         ]
     },
     {
-        "id": "mqtt-fan-control",
+        "id": "mqtt-cooling-control",
         "type": "mqtt out",
         "z": "akilli-sinif-flow",
-        "name": "Fan Control",
-        "topic": "akilli-sinif/sinif-1/control/fan",
+        "name": "Cooling Control",
+        "topic": "akilli-sinif/sinif-1/control/cooling",
         "qos": "1",
         "retain": "false",
         "respTopic": "",
@@ -563,6 +591,74 @@
         "broker": "mqtt-broker-config",
         "x": 330,
         "y": 640,
+        "wires": []
+    },
+    {
+        "id": "inject-heating-on",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "Heating AÇ",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"state\":\"on\"}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 700,
+        "wires": [
+            [
+                "mqtt-heating-control"
+            ]
+        ]
+    },
+    {
+        "id": "inject-heating-off",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "Heating Kapat",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 120,
+        "y": 740,
+        "wires": [
+            [
+                "mqtt-heating-control"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-heating-control",
+        "type": "mqtt out",
+        "z": "akilli-sinif-flow",
+        "name": "Heating Control",
+        "topic": "akilli-sinif/sinif-1/control/heating",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt-broker-config",
+        "x": 330,
+        "y": 720,
         "wires": []
     },
     {
@@ -646,7 +742,7 @@
         "type": "comment",
         "z": "akilli-sinif-flow",
         "name": "📊 Aktüatör Durum Kaydı",
-        "info": "LED ve Fan durumlarını InfluxDB'ye kaydet",
+        "info": "LED + Cooling + Heating durumlarını InfluxDB'ye kaydet",
         "x": 170,
         "y": 860,
         "wires": []
@@ -677,7 +773,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "Aktüatör Format",
-        "func": "// Topic: akilli-sinif/sinif-1/status/led veya fan\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar actuatorType = parts[3];  // led, fan\n\nif (actuatorType === 'led') {\n    msg.measurement = 'led_status';\n    msg.payload = [\n        { brightness: msg.payload.brightness || 0 },\n        { classroom: classroomId, reason: msg.payload.reason || 'manual' }\n    ];\n} else if (actuatorType === 'fan') {\n    msg.measurement = 'fan_status';\n    msg.payload = [\n        { speed: msg.payload.speed || 0 },\n        { classroom: classroomId, reason: msg.payload.reason || 'manual' }\n    ];\n} else {\n    return null;\n}\n\nreturn msg;",
+        "func": "// Topic: akilli-sinif/sinif-1/status/{led|cooling|heating}\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar actuatorType = parts[3];\n\nif (actuatorType === 'led') {\n    msg.measurement = 'led_status';\n    msg.payload = [\n        { brightness: msg.payload.brightness || 0 },\n        { classroom: classroomId, reason: msg.payload.reason || 'manual' }\n    ];\n} else if (actuatorType === 'cooling') {\n    msg.measurement = 'cooling_status';\n    msg.payload = [\n        { state: (msg.payload.state === 'on') ? 1 : 0 },\n        { classroom: classroomId, reason: msg.payload.reason || 'manual' }\n    ];\n} else if (actuatorType === 'heating') {\n    msg.measurement = 'heating_status';\n    msg.payload = [\n        { state: (msg.payload.state === 'on') ? 1 : 0 },\n        { classroom: classroomId, reason: msg.payload.reason || 'manual' }\n    ];\n} else {\n    return null;\n}\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -697,7 +793,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "Otomasyon Log",
-        "func": "// Otomasyon olaylarını kaydet\nvar classroomId = msg.classroomId || 'sinif-1';\nvar reason = msg.payload.reason || 'unknown';\nvar actuator = msg.topic.includes('led') ? 'led' : 'fan';\nvar value = msg.payload.brightness || msg.payload.speed || 0;\n\nmsg.measurement = 'automation_event';\nmsg.payload = [\n    { value: value, reason: reason },\n    { classroom: classroomId, actuator: actuator }\n];\n\nreturn msg;",
+        "func": "// Otomasyon olaylarını kaydet\nvar classroomId = msg.classroomId || 'sinif-1';\nvar reason = msg.payload.reason || 'unknown';\n\nvar actuator = 'unknown';\nvar value = 0;\nif (msg.topic.includes('/control/led')) {\n    actuator = 'led';\n    value = msg.payload.brightness || 0;\n} else if (msg.topic.includes('/control/cooling')) {\n    actuator = 'cooling';\n    value = (msg.payload.state === 'on') ? 1 : 0;\n} else if (msg.topic.includes('/control/heating')) {\n    actuator = 'heating';\n    value = (msg.payload.state === 'on') ? 1 : 0;\n}\n\nmsg.measurement = 'automation_event';\nmsg.payload = [\n    { value: value, reason: reason },\n    { classroom: classroomId, actuator: actuator }\n];\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -1327,5 +1423,415 @@
         "x": 620,
         "y": 180,
         "wires": []
+    },
+
+    {
+        "id": "relay-test-flow",
+        "type": "tab",
+        "label": "🔌 Relay Test",
+        "disabled": false,
+        "info": "esp32-relay-test cihazi icin manuel ON/OFF kontrol + status izleme.\n\nDevice: relay-test-1 (varsayilan)\nTopic root: akilli-sinif/relay-test/{device_id}/...\n\n2 role: cooling (GPIO21) ve heating (GPIO22).",
+        "env": []
+    },
+
+    {
+        "id": "relay-test-comment-header",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "🔌 Relay Test - Cooling + Heating Kontrol (relay-test-1)",
+        "info": "",
+        "x": 240,
+        "y": 40,
+        "wires": []
+    },
+
+    {
+        "id": "relay-test-comment-cooling",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "❄️ Cooling (Role 1 / GPIO 21)",
+        "info": "",
+        "x": 160,
+        "y": 90,
+        "wires": []
+    },
+    {
+        "id": "relay-test-cooling-on",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "Cooling ON",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/relay-test-1/control/cooling",
+        "payload": "{\"state\":\"on\"}",
+        "payloadType": "json",
+        "x": 150,
+        "y": 130,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+    {
+        "id": "relay-test-cooling-off",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "Cooling OFF",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/relay-test-1/control/cooling",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 150,
+        "y": 170,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+
+    {
+        "id": "relay-test-comment-heating",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "🔥 Heating (Role 2 / GPIO 22)",
+        "info": "",
+        "x": 160,
+        "y": 230,
+        "wires": []
+    },
+    {
+        "id": "relay-test-heating-on",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "Heating ON",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/relay-test-1/control/heating",
+        "payload": "{\"state\":\"on\"}",
+        "payloadType": "json",
+        "x": 150,
+        "y": 270,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+    {
+        "id": "relay-test-heating-off",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "Heating OFF",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/relay-test-1/control/heating",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 150,
+        "y": 310,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+
+    {
+        "id": "relay-test-comment-broadcast",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "📡 Broadcast (relay-test/all/...)",
+        "info": "Tum relay-test cihazlari ayni anda eklenir/cikarilir.",
+        "x": 170,
+        "y": 370,
+        "wires": []
+    },
+    {
+        "id": "relay-test-all-cooling-on",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "ALL Cooling ON",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/all/control/cooling",
+        "payload": "{\"state\":\"on\"}",
+        "payloadType": "json",
+        "x": 170,
+        "y": 410,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+    {
+        "id": "relay-test-all-cooling-off",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "ALL Cooling OFF",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/all/control/cooling",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 170,
+        "y": 450,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+    {
+        "id": "relay-test-all-heating-on",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "ALL Heating ON",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/all/control/heating",
+        "payload": "{\"state\":\"on\"}",
+        "payloadType": "json",
+        "x": 170,
+        "y": 490,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+    {
+        "id": "relay-test-all-heating-off",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "ALL Heating OFF",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/all/control/heating",
+        "payload": "{\"state\":\"off\"}",
+        "payloadType": "json",
+        "x": 170,
+        "y": 530,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+
+    {
+        "id": "relay-test-comment-reset",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "⚙️ Config Reset (relay-test-1)",
+        "info": "NVS siler, WiFiManager portalini acar.",
+        "x": 160,
+        "y": 590,
+        "wires": []
+    },
+    {
+        "id": "relay-test-reset-one",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "relay-test-1 Sifirla",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/relay-test-1/control/reset",
+        "payload": "{\"action\":\"reset_config\"}",
+        "payloadType": "json",
+        "x": 170,
+        "y": 630,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+    {
+        "id": "relay-test-reset-all",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "⚠️ ALL Sifirla",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/all/control/reset",
+        "payload": "{\"action\":\"reset_config\"}",
+        "payloadType": "json",
+        "x": 170,
+        "y": 670,
+        "wires": [["relay-test-mqtt-out"]]
+    },
+
+    {
+        "id": "relay-test-mqtt-out",
+        "type": "mqtt out",
+        "z": "relay-test-flow",
+        "name": "MQTT Out (topic from msg)",
+        "topic": "",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt-broker-config",
+        "x": 500,
+        "y": 350,
+        "wires": []
+    },
+
+    {
+        "id": "relay-test-comment-status",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "📊 Status Dinleyiciler",
+        "info": "Cihaz durumu + role echo'lari.",
+        "x": 800,
+        "y": 90,
+        "wires": []
+    },
+    {
+        "id": "relay-test-status-connection-in",
+        "type": "mqtt in",
+        "z": "relay-test-flow",
+        "name": "status/connection",
+        "topic": "akilli-sinif/relay-test/+/status/connection",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 800,
+        "y": 130,
+        "wires": [["relay-test-status-debug"]]
+    },
+    {
+        "id": "relay-test-status-cooling-in",
+        "type": "mqtt in",
+        "z": "relay-test-flow",
+        "name": "status/cooling",
+        "topic": "akilli-sinif/relay-test/+/status/cooling",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 790,
+        "y": 170,
+        "wires": [["relay-test-status-debug"]]
+    },
+    {
+        "id": "relay-test-status-heating-in",
+        "type": "mqtt in",
+        "z": "relay-test-flow",
+        "name": "status/heating",
+        "topic": "akilli-sinif/relay-test/+/status/heating",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 790,
+        "y": 210,
+        "wires": [["relay-test-status-debug"]]
+    },
+    {
+        "id": "relay-test-status-ota-in",
+        "type": "mqtt in",
+        "z": "relay-test-flow",
+        "name": "status/ota",
+        "topic": "akilli-sinif/relay-test/+/status/ota",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 780,
+        "y": 250,
+        "wires": [["relay-test-status-debug"]]
+    },
+    {
+        "id": "relay-test-status-debug",
+        "type": "debug",
+        "z": "relay-test-flow",
+        "name": "relay-test status",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "topic",
+        "statusType": "auto",
+        "x": 1050,
+        "y": 190,
+        "wires": []
+    },
+
+    {
+        "id": "relay-test-comment-ota",
+        "type": "comment",
+        "z": "relay-test-flow",
+        "name": "🚀 OTA Tetik (relay-test-1)",
+        "info": "URL'i kendi GitHub release'inle guncelle.",
+        "x": 800,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "relay-test-ota-trigger",
+        "type": "inject",
+        "z": "relay-test-flow",
+        "name": "relay-test-1 OTA",
+        "props": [
+            {"p": "topic", "vt": "str"},
+            {"p": "payload"}
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "akilli-sinif/relay-test/relay-test-1/control/ota",
+        "payload": "{\"action\":\"update\",\"version\":\"v1.0.1\",\"url\":\"https://github.com/MagiMigi/akilli-sinif/releases/download/relay-test-v1.0.1/firmware-relay-test.bin\"}",
+        "payloadType": "json",
+        "x": 800,
+        "y": 360,
+        "wires": [["relay-test-mqtt-out"]]
     }
 ]
