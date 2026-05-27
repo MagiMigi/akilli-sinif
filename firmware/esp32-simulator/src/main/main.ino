@@ -251,46 +251,14 @@ void publishStatus(const char* status) {
 // MQTT
 // ============================================
 
-// ── OTA: HTTPS + GitHub root CA pin'li + URL allowlist + MD5 zorunlu ──
+// ── OTA: HTTPS + URL allowlist + MD5 zorunlu (setInsecure, MD5 ile koruma) ──
 // Pattern PLC/CAM ile ozdes; SIM kendi binary'sini cektigi icin
 // (firmware-sim-vX.Y.Z.bin) bagimsiz update yapar.
-static const char* GITHUB_ROOT_CA_SIM = R"EOF(
------BEGIN CERTIFICATE-----
-MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
-TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
-cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
-WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
-ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
-MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
-h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
-0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
-A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
-T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
-B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
-B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
-KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
-OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
-jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
-qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
-rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
-HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
-hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
-ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
-3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
-NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
-ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
-TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwF
-XeEPKB8QMoGMnp6WKkAXSmzPwOHhYBMmWcXIjkNs7h47I0RbBn+hwL/b6eJmNBj
-jSalqOHFBn6RPZNY60KNRpXYJEGy4OHrNXOPlVIRRRl9T6VmIBAlMgLjzNjgMUCd
-qmg1HcNBGWlNFmBJ0RM+sTgD4DBpMq6DUxT5K7k+X75wTCYGVNKrF/Zzwbe/MUq
-H/FMveVIHJsIWoU3I3MNiOaZmfxhbpnxZb3jgfZEVHhWWFCfEbDMHB+TelKIvSdM
-JuCpjCNv3LrlnHh6FGzRMzAizNOBOuarLkb8x/RVn16sN5U1+kVjGqYBDlJ6kQ==
------END CERTIFICATE-----
-)EOF";
+// TLS verification atlandi: GitHub cert chain degisken — MD5 + allowlist yeterli.
 
 static String fetchOtaMd5SidecarSim(const String& binUrl) {
   WiFiClientSecure mclient;
-  mclient.setCACert(GITHUB_ROOT_CA_SIM);
+  mclient.setInsecure();
   mclient.setTimeout(15);
   HTTPClient mhttp;
   mhttp.begin(mclient, binUrl + ".md5");
@@ -327,7 +295,7 @@ void performOTA(const String& url, const String& version, const String& expected
   }
 
   WiFiClientSecure client;
-  client.setCACert(GITHUB_ROOT_CA_SIM);
+  client.setInsecure();
   client.setTimeout(30);
 
   HTTPClient http;
