@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Akıllı Sınıf",
+    "slug": "akilli-sinif",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.magimigi.akillisinif",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#14B8A6"
+        }
+      ],
+      "expo-asset"
+    ],
+    "extra": {
+      "defaultPort": 9001
+    }
+  }
+}

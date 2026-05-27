@@ -1,0 +1,29 @@
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+android/
+ios/
+*.apk
+*.aab
+
+# Env
+.env
+.env.local
+google-services.json
