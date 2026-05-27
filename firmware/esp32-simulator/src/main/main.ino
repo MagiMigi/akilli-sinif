@@ -10,7 +10,7 @@
  * - MQTT üzerinden veri yayını (PLC firmware ile aynı topic yapısı)
  * - WiFiManager ile kimlik bilgisi yönetimi (NVS'e kaydedilir)
  * - OTA firmware güncelleme
- * - PLC automation mantığı (yazılım içi: LED % ve fan % hesaplanır)
+ * - PLC automation mantığı (yazılım içi: LED %, cooling/heating durumu hesaplanır)
  *
  * ILK KURULUM:
  *   1. Firmware'i yak
@@ -34,6 +34,9 @@
 #include <Preferences.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <Update.h>
 #include "../../../version.h"
 #include "../../../secrets.h"   // MQTT user/sifre — repo'ya commit'lenmez
 
@@ -94,7 +97,8 @@ struct SimData {
   bool  windowOpen;
   int   personCount;
   int   ledBrightness;
-  int   fanSpeed;
+  bool  coolingOn;
+  bool  heatingOn;
 };
 
 SimData sim;
@@ -156,10 +160,13 @@ void updateSimulation() {
   else if (sim.motionDetected && sim.lightLevel < 400) sim.ledBrightness = 40;
   else                                                  sim.ledBrightness = 0;
 
-  // Automation: Fan
-  if (sim.temperature > 26.0f || sim.airQuality > 200) sim.fanSpeed = 70;
-  else if (sim.temperature > 24.0f)                     sim.fanSpeed = 30;
-  else                                                   sim.fanSpeed = 0;
+  // Automation: Cooling histeresis (PLC ile aynı: 26 ON / 24 OFF)
+  if (sim.temperature > 26.0f)      sim.coolingOn = true;
+  else if (sim.temperature < 24.0f) sim.coolingOn = false;
+
+  // Automation: Heating histeresis (PLC ile aynı: 20 ON / 22 OFF)
+  if (sim.temperature < 20.0f)      sim.heatingOn = true;
+  else if (sim.temperature > 22.0f) sim.heatingOn = false;
 }
 
 // ============================================
@@ -211,8 +218,12 @@ void publishSensorData() {
   publishJson(buildTopic("actuators", "led"), d);
 
   d.clear();
-  d["value"] = sim.fanSpeed; d["unit"] = "%"; d["sim"] = true;
-  publishJson(buildTopic("actuators", "fan"), d);
+  d["state"] = sim.coolingOn ? "on" : "off"; d["sim"] = true;
+  publishJson(buildTopic("actuators", "cooling"), d);
+
+  d.clear();
+  d["state"] = sim.heatingOn ? "on" : "off"; d["sim"] = true;
+  publishJson(buildTopic("actuators", "heating"), d);
 
   Serial.printf("[SIM] %02d:%02d | %.1fC | %.0f%% | %dlux | %dppm | %dkisi\n",
                 (int)(simTime / 60), (int)(simTime % 60),
@@ -240,12 +251,150 @@ void publishStatus(const char* status) {
 // MQTT
 // ============================================
 
+// ── OTA: HTTPS + GitHub root CA pin'li + URL allowlist + MD5 zorunlu ──
+// Pattern PLC/CAM ile ozdes; SIM kendi binary'sini cektigi icin
+// (firmware-sim-vX.Y.Z.bin) bagimsiz update yapar.
+static const char* GITHUB_ROOT_CA_SIM = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwF
+XeEPKB8QMoGMnp6WKkAXSmzPwOHhYBMmWcXIjkNs7h47I0RbBn+hwL/b6eJmNBj
+jSalqOHFBn6RPZNY60KNRpXYJEGy4OHrNXOPlVIRRRl9T6VmIBAlMgLjzNjgMUCd
+qmg1HcNBGWlNFmBJ0RM+sTgD4DBpMq6DUxT5K7k+X75wTCYGVNKrF/Zzwbe/MUq
+H/FMveVIHJsIWoU3I3MNiOaZmfxhbpnxZb3jgfZEVHhWWFCfEbDMHB+TelKIvSdM
+JuCpjCNv3LrlnHh6FGzRMzAizNOBOuarLkb8x/RVn16sN5U1+kVjGqYBDlJ6kQ==
+-----END CERTIFICATE-----
+)EOF";
+
+static String fetchOtaMd5SidecarSim(const String& binUrl) {
+  WiFiClientSecure mclient;
+  mclient.setCACert(GITHUB_ROOT_CA_SIM);
+  mclient.setTimeout(15);
+  HTTPClient mhttp;
+  mhttp.begin(mclient, binUrl + ".md5");
+  mhttp.setTimeout(15000);
+  mhttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  int code = mhttp.GET();
+  if (code != HTTP_CODE_OK) { mhttp.end(); return ""; }
+  String body = mhttp.getString();
+  mhttp.end();
+  body.trim();
+  if (body.length() < 32) return "";
+  String md5 = body.substring(0, 32);
+  md5.toLowerCase();
+  return md5;
+}
+
+void performOTA(const String& url, const String& version, const String& expectedMd5 = "") {
+  Serial.println("[OTA] Guncelleme basliyor: " + version);
+  Serial.println("[OTA] URL: " + url);
+
+  const char* ALLOWED_PREFIX = "https://github.com/MagiMigi/akilli-sinif/releases/";
+  if (!url.startsWith(ALLOWED_PREFIX)) {
+    Serial.println("[OTA] URL allowlist disinda — reddedildi.");
+    return;
+  }
+
+  String md5 = expectedMd5;
+  if (md5.length() == 0) {
+    md5 = fetchOtaMd5SidecarSim(url);
+    if (md5.length() != 32) {
+      Serial.println("[OTA] MD5 yok/gecersiz — reddedildi.");
+      return;
+    }
+  }
+
+  WiFiClientSecure client;
+  client.setCACert(GITHUB_ROOT_CA_SIM);
+  client.setTimeout(30);
+
+  HTTPClient http;
+  http.begin(client, url);
+  http.setTimeout(60000);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("[OTA] HTTPS hata: %d\n", code);
+    http.end();
+    return;
+  }
+  int size = http.getSize();
+  if (!Update.begin(size)) {
+    Serial.println("[OTA] Yetersiz alan!");
+    http.end();
+    return;
+  }
+  if (!Update.setMD5(md5.c_str())) {
+    Serial.println("[OTA] MD5 set hatasi.");
+    Update.abort();
+    http.end();
+    return;
+  }
+  Update.writeStream(*http.getStreamPtr());
+  http.end();
+
+  if (Update.end() && Update.isFinished()) {
+    Serial.println("[OTA] BASARILI — restart...");
+    delay(500);
+    ESP.restart();
+  } else {
+    Serial.println("[OTA] Hata: " + String(Update.errorString()));
+  }
+}
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String topicStr = String(topic);
   String msg = "";
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
   Serial.println("[SIM] MQTT: " + topicStr + " -> " + msg);
-  // Simulator OTA icin PLC firmware binary'ini kullan (ayni kod)
+
+  StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, msg) != DeserializationError::Ok) return;
+
+  if (topicStr.endsWith("/control/ota")) {
+    const char* action  = doc["action"]  | "";
+    const char* version = doc["version"] | "";
+    const char* url     = doc["url"]     | "";
+    const char* md5     = doc["md5"]     | "";
+    if (strcmp(action, "update") == 0 && strlen(url) > 0) {
+      performOTA(String(url), String(version), String(md5));
+    }
+    return;
+  }
+
+  if (topicStr.endsWith("/control/reset")) {
+    if (strcmp(doc["action"] | "", "reset_config") == 0) {
+      Serial.println("[SIM] Reset komutu — NVS siliniyor.");
+      prefs.begin("akilli-sinif", false);
+      prefs.clear();
+      prefs.end();
+      delay(500);
+      ESP.restart();
+    }
+  }
 }
 
 void setupMQTT() {
@@ -255,6 +404,16 @@ void setupMQTT() {
 }
 
 void connectMQTT() {
+  if (reconnectAttempts >= MAX_RECONNECT) {
+    // Cooldown: backoff'a girdik, bir sonraki tetik PUBLISH_INTERVAL sonrasi.
+    static unsigned long lastWarn = 0;
+    if (millis() - lastWarn > 30000) {
+      lastWarn = millis();
+      Serial.printf("[MQTT] %d basarisiz deneme — backoff. WiFi yeniden baglaninca sifirlanir.\n", reconnectAttempts);
+    }
+    return;
+  }
+
   Serial.print("[MQTT] Baglaniyor...");
   String willTopic = buildTopic("status", "connection");
   String willMsg   = "{\"status\":\"offline\",\"device\":\"" + mqttClientId + "\"}";
@@ -264,7 +423,11 @@ void connectMQTT() {
     mqttConnected     = true;
     reconnectAttempts = 0;
     Serial.println(" BAGLANDI!");
-    mqttClient.subscribe(buildTopic("control", "ota").c_str(), 1);
+    // Single-cihaz + broadcast OTA / reset
+    mqttClient.subscribe(buildTopic("control", "ota").c_str(),   1);
+    mqttClient.subscribe(buildTopic("control", "reset").c_str(), 1);
+    mqttClient.subscribe("akilli-sinif/all/control/ota",   1);
+    mqttClient.subscribe("akilli-sinif/all/control/reset", 1);
     publishStatus("online");
   } else {
     Serial.printf(" HATA: %d\n", mqttClient.state());
@@ -324,6 +487,66 @@ void checkConfigReset() {
   }
 }
 
+// ============================================
+// RUNTIME PORTAL TETIKLEYICI (loop() icinden)
+// ============================================
+// Cihaz acikken BOOT (GPIO0) 5 sn basili tutulursa:
+//   - Serial'a geri sayim 5..1 yazar (SIM'de TFT yok)
+//   - NVS'e "force_portal" bayragi yazar
+//   - Cihaz yeniden baslar, setupWiFi() WiFi portal acar
+// Bayrak yaklasimi: classroom_id ve mqtt_broker silinmez, portal
+// mevcut degerleri gosterir — sadece degistirmek istedigini gunceller.
+unsigned long bootBtnPressStartMs   = 0;
+bool          bootCountdownActive   = false;
+int           lastBootCountdownShown = -1;
+
+void checkRuntimePortalRequest() {
+  bool pressed = (digitalRead(CONFIG_RESET_PIN) == LOW);
+
+  if (!pressed) {
+    if (bootCountdownActive) {
+      Serial.println("[Portal] BOOT birakildi — iptal.");
+      bootCountdownActive = false;
+    }
+    bootBtnPressStartMs    = 0;
+    lastBootCountdownShown = -1;
+    return;
+  }
+
+  unsigned long nowMs = millis();
+  if (bootBtnPressStartMs == 0) {
+    bootBtnPressStartMs = nowMs;
+    return;
+  }
+
+  unsigned long held = nowMs - bootBtnPressStartMs;
+  if (held < 400) return;  // 400 ms'den kisa basislari yoksay
+
+  if (!bootCountdownActive) {
+    bootCountdownActive    = true;
+    lastBootCountdownShown = -1;
+    Serial.println("[Portal] BOOT basili — WiFi portal icin 5 sn tut...");
+  }
+
+  int remaining = (int)((RESET_HOLD_MS - held) / 1000) + 1;
+  if (remaining < 1) remaining = 1;
+  if (remaining > 5) remaining = 5;
+
+  if (remaining != lastBootCountdownShown) {
+    Serial.printf("[Portal] %d...\n", remaining);
+    lastBootCountdownShown = remaining;
+  }
+
+  if (held >= RESET_HOLD_MS) {
+    Serial.println("[Portal] 5 sn doldu — bayrak yazilip yeniden baslatiliyor...");
+    prefs.begin("akilli-sinif", false);
+    prefs.putBool("force_portal", true);
+    prefs.end();
+    delay(500);
+    ESP.restart();
+  }
+}
+
 void setupWiFi() {
   WiFiManager wm;
 
@@ -342,7 +565,26 @@ void setupWiFi() {
   wm.addParameter(&p_sinif);
   wm.setConfigPortalTimeout(180);
 
-  if (!wm.autoConnect("Akilli-SIM-Setup", apPass.c_str())) {
+  // NVS'teki force_portal bayragini oku (runtime BOOT 5sn ile set edilir)
+  prefs.begin("akilli-sinif", false);
+  bool forcePortalFlag = prefs.getBool("force_portal", false);
+  if (forcePortalFlag) prefs.remove("force_portal");  // one-shot
+  prefs.end();
+
+  // Portal acma sartlari: bayrak, broker bos, acilista BOOT basili
+  bool forcePortal = forcePortalFlag
+                     || (strlen(MQTT_BROKER) == 0)
+                     || (digitalRead(CONFIG_RESET_PIN) == LOW);
+
+  bool connected;
+  if (forcePortal) {
+    Serial.println("[WiFi] Portal modu zorlandi.");
+    connected = wm.startConfigPortal("Akilli-SIM-Setup", apPass.c_str());
+  } else {
+    connected = wm.autoConnect("Akilli-SIM-Setup", apPass.c_str());
+  }
+
+  if (!connected) {
     Serial.println("[WiFi] Baglanti basarisiz! Yeniden baslatiliyor...");
     delay(3000);
     ESP.restart();
@@ -397,9 +639,20 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  // BOOT (GPIO0) 5 sn basili -> Serial countdown + WiFi portal acmak icin restart
+  checkRuntimePortalRequest();
+
   if (now - lastWifiCheck >= WIFI_CHECK_INT) {
     lastWifiCheck = now;
-    if (WiFi.status() != WL_CONNECTED) WiFi.reconnect();
+    static wl_status_t prevWifi = WL_DISCONNECTED;
+    wl_status_t curWifi = WiFi.status();
+    if (curWifi != WL_CONNECTED) {
+      WiFi.reconnect();
+    } else if (prevWifi != WL_CONNECTED) {
+      // WiFi yeni geri geldi — MQTT backoff'unu sifirla.
+      reconnectAttempts = 0;
+    }
+    prevWifi = curWifi;
   }
 
   if (!mqttClient.connected()) {

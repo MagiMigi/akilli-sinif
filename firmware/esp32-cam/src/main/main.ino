@@ -120,6 +120,16 @@ bool cameraReady = false;
 int consecutiveFailures = 0;
 const int MAX_FAILURES = 5;
 
+// PIR durumu — PLC'den MQTT subscribe ile alınır.
+// PIR HIGH veya YOLO person_count > 0 → aktif çekim aralığı.
+bool motionDetected = false;
+unsigned long lastMotionMs = 0;
+int personCount = 0;
+const unsigned long MOTION_GRACE_MS = 30000;     // Son hareketten 30 sn sonra IDLE'a dön
+const unsigned long PIR_FRESH_TIMEOUT_MS = 60000; // 60 sn taze PIR mesajı yoksa fail-safe
+unsigned long lastPirMsgMs = 0;
+const int CAPTURE_INTERVAL_KEEPALIVE = 300000;   // 5 dk — boş sınıfta minimum trafik
+
 // WiFi yeniden bağlanma sayacı (otomatik portal için)
 int wifiFailCount = 0;
 const int WIFI_FAIL_PORTAL_THRESHOLD = 10;  // 10 x 5sn = ~50sn sonra portal acar
@@ -291,12 +301,20 @@ JuCpjCNv3LrlnHh6FGzRMzAizNOBOuarLkb8x/RVn16sN5U1+kVjGqYBDlJ6kQ==
 
 // MD5 sidecar (.md5) dosyasini HTTPS+CA pin'li indir. Boş döner = bulunamadı.
 static String fetchOtaMd5Sidecar(const String& binUrl) {
+  // GUVENLIK: sidecar URL'si de allowlist'te olmali.
+  const char* ALLOWED_PREFIX = "https://github.com/MagiMigi/akilli-sinif/releases/";
+  String sidecarUrl = binUrl + ".md5";
+  if (!sidecarUrl.startsWith(ALLOWED_PREFIX)) {
+    Serial.println("[OTA] .md5 sidecar URL allowlist disinda: " + sidecarUrl);
+    return "";
+  }
+
   WiFiClientSecure mclient;
   mclient.setCACert(GITHUB_ROOT_CA_CAM);
   mclient.setTimeout(15);
 
   HTTPClient mhttp;
-  mhttp.begin(mclient, binUrl + ".md5");
+  mhttp.begin(mclient, sidecarUrl);
   mhttp.setTimeout(15000);
   mhttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
@@ -433,7 +451,25 @@ void setupWiFi() {
 
   wm.setConfigPortalTimeout(180);
 
-  bool connected = wm.autoConnect(camApName.c_str(), apPass.c_str());
+  // NVS'teki force_portal bayragini oku
+  // CAM'da BOOT runtime'da okunamaz (GPIO0 = kamera XCLK ~20MHz).
+  // Bayrak MQTT (control/reset action=open_portal) veya HTTP (/portal) ile set edilir.
+  prefs.begin("akilli-cam", false);
+  bool forcePortalFlag = prefs.getBool("force_portal", false);
+  if (forcePortalFlag) prefs.remove("force_portal");  // one-shot
+  prefs.end();
+
+  bool forcePortal = forcePortalFlag
+                     || (strlen(SERVER_URL) == 0)
+                     || (digitalRead(CONFIG_RESET_PIN) == LOW);
+
+  bool connected;
+  if (forcePortal) {
+    Serial.println("[WiFi] Portal modu zorlandi (bayrak/bos-config/BOOT).");
+    connected = wm.startConfigPortal(camApName.c_str(), apPass.c_str());
+  } else {
+    connected = wm.autoConnect(camApName.c_str(), apPass.c_str());
+  }
 
   if (!connected) {
     Serial.println("[WiFi] Baglanti saglanamadi, yeniden baslatiliyor...");
@@ -500,15 +536,10 @@ bool sendImageToServer(camera_fb_t *fb) {
       DeserializationError error = deserializeJson(doc, response);
       
       if (!error) {
-        int personCount = doc["person_count"] | 0;
+        // Global personCount — capture loop bunu okuyor (PIR ile birlikte).
+        personCount = doc["person_count"] | 0;
         Serial.printf("Tespit edilen kisi sayisi: %d\n", personCount);
-        
-        // Kisi varsa daha sik foto cek
-        if (personCount > 0) {
-          captureInterval = CAPTURE_INTERVAL_ACTIVE;
-        } else {
-          captureInterval = CAPTURE_INTERVAL_IDLE;
-        }
+        // Capture aralığı kararı updateCaptureInterval()'da, PIR + personCount birlikte.
       }
       
       consecutiveFailures = 0;
@@ -530,19 +561,74 @@ bool sendImageToServer(camera_fb_t *fb) {
 // MQTT - CONFIG CALLBACK
 // ============================================
 
-// Node-RED'den gelen config güncellemelerini işle
-// Topic: akilli-sinif/{sinif-id}/control/config
-// Payload örneği: {"api_key":"yeni-key"} veya {"server_url":"http://IP:5000/analyze"}
+// MQTT mesaj dispatcher — config + OTA komutlarini ayirir.
+// Topic'ler:
+//   akilli-sinif/{sinif-id}/control/config — JSON config guncelleme
+//   akilli-sinif/{sinif-id}/control/ota    — OTA komutu (single-cihaz)
+//   akilli-sinif/all/control/ota           — OTA komutu (broadcast)
+//   akilli-sinif/{sinif-id}/control/reset  — config sifirla
+//   akilli-sinif/all/control/reset         — config sifirla (broadcast)
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+  String topicStr(topic);
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-  Serial.println("[MQTT] Config mesaji alindi: " + msg);
+  Serial.println("[MQTT] " + topicStr + " -> " + msg);
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   if (deserializeJson(doc, msg) != DeserializationError::Ok) {
     Serial.println("[MQTT] JSON parse hatasi, mesaj yok sayildi.");
     return;
   }
+
+  // PIR durumu: {"detected":true/false,"timestamp":12345}
+  if (topicStr.endsWith("/sensors/pir")) {
+    motionDetected = doc["detected"] | false;
+    lastPirMsgMs = millis();
+    if (motionDetected) {
+      lastMotionMs = millis();
+    }
+    return;
+  }
+
+  // OTA komutu: {"action":"update","version":"v1.2.0","url":"...","md5":"..."}
+  if (topicStr.endsWith("/control/ota")) {
+    const char* action  = doc["action"]  | "";
+    const char* version = doc["version"] | "";
+    const char* url     = doc["url"]     | "";
+    const char* md5     = doc["md5"]     | "";
+    if (strcmp(action, "update") == 0 && strlen(url) > 0) {
+      performOTA(String(url), String(version), String(md5));
+    } else {
+      Serial.println("[MQTT] OTA komutu eksik (action/url).");
+    }
+    return;
+  }
+
+  // Reset komutu:
+  //   {"action":"reset_config"} -> NVS tamamen silinir, portal acilir (config kaybi)
+  //   {"action":"open_portal"}  -> NVS korunur, sadece force_portal bayragi set + restart
+  if (topicStr.endsWith("/control/reset")) {
+    const char* action = doc["action"] | "";
+    if (strcmp(action, "reset_config") == 0) {
+      Serial.println("[MQTT] Reset komutu — NVS siliniyor, restart...");
+      prefs.begin("akilli-cam", false);
+      prefs.clear();
+      prefs.end();
+      delay(500);
+      ESP.restart();
+    } else if (strcmp(action, "open_portal") == 0) {
+      Serial.println("[MQTT] open_portal — force_portal bayragi set + restart...");
+      prefs.begin("akilli-cam", false);
+      prefs.putBool("force_portal", true);
+      prefs.end();
+      delay(500);
+      ESP.restart();
+    }
+    return;
+  }
+
+  // Config guncelleme — sadece /control/config topic'i
+  if (!topicStr.endsWith("/control/config")) return;
 
   prefs.begin("akilli-cam", false);
   bool changed = false;
@@ -603,15 +689,25 @@ void setupMQTT() {
   mqttClient.setServer(MQTT_BROKER, 1883);
   mqttClient.setCallback(onMqttMessage);
 
+  // OTA payload'i icin daha buyuk buffer (URL+MD5+action+version)
+  mqttClient.setBufferSize(512);
+
   String clientId = "cam-" + String(CLASSROOM_ID);
   if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
-    // Config güncellemelerini dinle
-    String subTopic = String("akilli-sinif/") + CLASSROOM_ID + "/control/config";
-    mqttClient.subscribe(subTopic.c_str());
-    Serial.println("[MQTT] Subscribe: " + subTopic);
+    String base = String("akilli-sinif/") + CLASSROOM_ID;
+    // Config / OTA / reset — single-cihaz
+    mqttClient.subscribe((base + "/control/config").c_str());
+    mqttClient.subscribe((base + "/control/ota").c_str(), 1);
+    mqttClient.subscribe((base + "/control/reset").c_str(), 1);
+    // OTA / reset — broadcast (tum cihazlar)
+    mqttClient.subscribe("akilli-sinif/all/control/ota", 1);
+    mqttClient.subscribe("akilli-sinif/all/control/reset", 1);
+    // PIR — PLC yayını, capture loop varlık tespiti için kullanır.
+    mqttClient.subscribe((base + "/sensors/pir").c_str());
+    Serial.println("[MQTT] Subscribe: " + base + "/control/{config,ota,reset} + sensors/pir + all broadcast");
 
     // IP adresini yayınla (retain=true → Node-RED her zaman görür)
-    String ipTopic = String("akilli-sinif/") + CLASSROOM_ID + "/status/ip";
+    String ipTopic = base + "/status/ip";
     mqttClient.publish(ipTopic.c_str(), WiFi.localIP().toString().c_str(), true);
     Serial.println("[MQTT] IP yayinlandi: " + WiFi.localIP().toString());
   } else {
@@ -642,6 +738,25 @@ void setupWebServer() {
     ESP.restart();
   });
 
+  // /portal — config'i KORUYARAK WiFi portal acmak icin restart
+  // (CAM'da BOOT runtime'da okunamadigi icin bu endpoint mevcut)
+  webServer.on("/portal", HTTP_GET, []() {
+    String pass = makeApPassword();
+    if (!webServer.authenticate("admin", pass.c_str())) {
+      return webServer.requestAuthentication();
+    }
+    webServer.send(200, "text/plain",
+      "WiFi portal modunda yeniden baslatiliyor (config korunur)...\n"
+      "Lutfen 'Akilli-CAM-Setup' WiFi agina baglanin.");
+    delay(500);
+    prefs.begin("akilli-cam", false);
+    prefs.putBool("force_portal", true);
+    prefs.end();
+    Serial.println("[WebServer] /portal (auth OK), force_portal bayragi set.");
+    delay(500);
+    ESP.restart();
+  });
+
   // Durum sayfası (HTTP Basic Auth — version-leak korumasi)
   webServer.on("/", HTTP_GET, []() {
     String pass = makeApPassword();
@@ -652,7 +767,8 @@ void setupWebServer() {
     html += "<p>Sinif: " + String(CLASSROOM_ID) + "</p>";
     html += "<p>Firmware: v" FIRMWARE_VERSION "</p>";
     html += "<p>IP: " + WiFi.localIP().toString() + "</p>";
-    html += "<p><a href='/reset-config'>Config Sifirla</a></p>";
+    html += "<p><a href='/portal'>WiFi Portal Ac (config korur)</a></p>";
+    html += "<p><a href='/reset-config'>Config Sifirla (her seyi siler)</a></p>";
     webServer.send(200, "text/html", html);
   });
 
@@ -820,9 +936,26 @@ void loop() {
   // Web sunucu isteklerini isle (/reset-config vb.)
   webServer.handleClient();
 
-  // Periyodik foto cekme
+  // Capture aralığı kararı: PIR (donanım) OR YOLO personCount (görsel) varlık tespiti.
+  // Her ikisi de boşsa son hareketten 30 sn grace, ondan sonra 5 dk keep-alive.
   unsigned long currentMillis = millis();
-  if (currentMillis - lastCapture >= captureInterval) {
+  unsigned long sinceMotion = currentMillis - lastMotionMs;
+  unsigned long sincePirMsg = currentMillis - lastPirMsgMs;
+  // Fail-safe: PIR mesajı hiç gelmedi ya da 60+ sn taze değilse "var" kabul et —
+  // broker/PLC offline durumunda varlık kaçırma riski yerine ekstra çekim tercih.
+  bool pirStale = (lastPirMsgMs == 0) || (sincePirMsg > PIR_FRESH_TIMEOUT_MS);
+  bool effectiveMotion = pirStale ? true : motionDetected;
+
+  if (effectiveMotion || personCount > 0) {
+    captureInterval = CAPTURE_INTERVAL_ACTIVE;       // 10 sn
+  } else if (sinceMotion < MOTION_GRACE_MS) {
+    captureInterval = CAPTURE_INTERVAL_IDLE;         // 60 sn — son hareket grace
+  } else {
+    captureInterval = CAPTURE_INTERVAL_KEEPALIVE;    // 5 dk — boş sınıf
+  }
+
+  // Periyodik foto cekme
+  if (currentMillis - lastCapture >= (unsigned long)captureInterval) {
     lastCapture = currentMillis;
     captureAndSend();
   }
