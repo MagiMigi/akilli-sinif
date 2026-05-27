@@ -161,14 +161,17 @@ Iki mod vardir: **gercek donanim** ve **mock (simulasyon)**.
 
 ### Aktuator Kontrolu
 
-| Aktuator | GPIO | PWM Freq | Resolution | Aralik |
-|----------|------|----------|------------|--------|
-| LED | 13 | 500 Hz | 8-bit | 0-100% > map 0-255 |
-| Fan | 12 | 500 Hz | 8-bit | 0-100% > map 0-255 |
+| Aktuator | GPIO | Tip | Aralik |
+|----------|------|-----|--------|
+| LED (strip + indikator) | 13 | PWM 500 Hz, 8-bit | 0-100% > map 0-255 |
+| Cooling rolesi (12V fan) | 21 | Dijital (BC337 + JRC-19F) | on/off |
+| Heating rolesi (22Ω 5W) | 22 | Dijital (BC337 + JRC-19F) | on/off |
 
-ESP32 Arduino Core 3.x API kullanilir:
-- `ledcAttach(pin, freq, resolution)` — setup'ta
-- `ledcWrite(pin, value)` — kontrol sirasinda
+ESP32 Arduino Core 3.x API:
+- LED PWM: `ledcAttach(13, 500, 8)` setup'ta, `ledcWrite(13, value)` kontrolde
+- Roleler: `pinMode(21, OUTPUT)`, `digitalWrite(21, HIGH/LOW)` (RELAY_ACTIVE_LEVEL = HIGH, BC337 NPN low-side)
+
+Roleler icin yerlesik histeresis: cooling 26°C ON / 24°C OFF, heating 20°C ON / 22°C OFF. Manuel mod (`control/mode {auto:false}`) histeresisi devre disi birakir.
 
 ### Otomatik Uyari Sistemi
 
@@ -258,17 +261,22 @@ Baslangic: 08:00 (simTime = 480).
 
 ### Yazilim Ici Otomasyon
 
-Simulator kendi LED ve fan degerlerini hesaplar:
+Simulator kendi LED, cooling ve heating durumlarini hesaplar (PLC firmware ile ayni esikler):
 
 **LED:**
 - Hareket var + isik < 200 lux > %80
 - Hareket var + isik < 400 lux > %40
 - Diger > %0
 
-**Fan:**
-- Sicaklik > 26C veya hava > 200 ppm > %70
-- Sicaklik > 24C > %30
-- Diger > %0
+**Cooling histeresis:**
+- Sicaklik > 26C > ON
+- Sicaklik < 24C > OFF
+
+**Heating histeresis:**
+- Sicaklik < 20C > ON
+- Sicaklik > 22C > OFF
+
+Yayinlanan topic'ler: `actuators/led`, `actuators/cooling`, `actuators/heating`.
 
 ---
 

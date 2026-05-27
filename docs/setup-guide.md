@@ -75,12 +75,13 @@ sudo cp server/mosquitto/mosquitto.conf /etc/mosquitto/mosquitto.conf
 > 2. `mosquitto_passwd` ile broker tarafina ayni degeri ver.
 > `secrets.h` `.gitignore`'da, repo'ya commit'lenmez.
 
-Sistemde iki MQTT kullanicisi vardir:
+Sistemde uc MQTT kullanicisi vardir:
 
 | Kullanici | Eski sifre (degistir!) | Kullanan |
 |-----------|------------------------|----------|
 | `esp32` | `akilli123` | ESP32 cihazlari (PLC, CAM, Simulator) |
 | `nodered` | `nodered123` | Node-RED ve YOLO sunucusu |
+| `mobile` | `mobile123` | Android mobil uygulama (WS port 9001) |
 
 ```bash
 # esp32 kullanicisi
@@ -90,7 +91,13 @@ sudo mosquitto_passwd -c /etc/mosquitto/passwd esp32
 # nodered kullanicisi
 sudo mosquitto_passwd /etc/mosquitto/passwd nodered
 # Sifre: kendin sec, Node-RED config'inde de ayni degeri kullan
+
+# mobile kullanicisi (Android uygulamasi WS port 9001 uzerinden baglanir)
+sudo mosquitto_passwd /etc/mosquitto/passwd mobile
+# Sifre: kendin sec, mobil uygulamada Setup ekranina gir
 ```
+
+> **Mobil uygulama icin WebSocket portu:** `mosquitto.conf` icinde `listener 9001 0.0.0.0` (protocol websockets) acik. ACL'de `mobile` kullanicisi sensor/status okur, control komutlari yazar.
 
 ### Log Dizini ve Servis
 
@@ -458,7 +465,7 @@ Arduino kutuphaneler dizininde `TFT_eSPI/User_Setup.h` dosyasini ac ve su pinler
 
 | TFT Pini | ESP32 GPIO |
 |----------|------------|
-| TFT_CS | 15 |
+| TFT_CS | 17 |
 | TFT_DC (A0/RS) | 33 |
 | TFT_RST | 32 |
 | TFT_MOSI (SDA) | 23 |
@@ -606,6 +613,68 @@ Model dosyasi (`yolov8n.pt`) yoksa otomatik indirilir. Internet baglantisi gerek
 - `akilli-sinif/<sinif_id>/status/ota` topic'ini dinleyerek hata mesajini gor
 
 ---
+
+## TLS Opt-In (LAN Disi Deploy Icin)
+
+Default kurulum LAN-only varsayar: Mosquitto plain MQTT (1883) + WebSockets
+(9001), YOLO Flask plain HTTP (5000). Bu, tek subnet'te yetkili kullanicilarla
+sinirli ortamlar icin yeterlidir. Router'da port forward yapip internet'e
+acarsan **TLS sart** — kullanici/sifre cleartext, API key cleartext olur.
+
+### 1. Mosquitto TLS (port 8883)
+
+Self-signed cert uret (CA + server cert; SAN = LAN IP + localhost + hostname):
+
+```bash
+cd akilli-sinif
+bash server/mosquitto/gen-certs.sh 192.168.1.10
+# Cikti: server/mosquitto/certs/{ca.crt, server.crt, server.key, ca.key}
+```
+
+Mosquitto'ya yerlestir:
+
+```bash
+sudo mkdir -p /etc/mosquitto/certs
+sudo cp server/mosquitto/certs/{ca.crt,server.crt,server.key} /etc/mosquitto/certs/
+sudo chown mosquitto:mosquitto /etc/mosquitto/certs/*
+sudo chmod 640 /etc/mosquitto/certs/server.key
+```
+
+`server/mosquitto/mosquitto.conf` icindeki "TLS" blogunu yorumdan cikar
+(`listener 8883`...`keyfile`), sonra:
+
+```bash
+sudo systemctl restart mosquitto
+mosquitto_sub -h 192.168.1.10 -p 8883 --cafile server/mosquitto/certs/ca.crt \
+  -t '#' -u nodered -P "<password>"
+```
+
+Mobil tarafta `SetupScreen` → "TLS / WSS kullan" toggle'i ac, port'u 8883
+(native MQTT) veya WSS varyantini kullan. Self-signed CA icin Android'de
+ekstra trust adimi gerekebilir.
+
+### 2. YOLO Flask HTTPS (port 5000)
+
+Cert + key path'lerini env degiskeni olarak ver — kod default'ta plain HTTP'de
+kalir, env set edilirse otomatik HTTPS'e gecer:
+
+```bash
+export YOLO_TLS_CERT=/abs/path/to/server.crt
+export YOLO_TLS_KEY=/abs/path/to/server.key
+python yolo_server.py
+# Sunucu basliyor: https://0.0.0.0:5000
+```
+
+Cert yenilendiginde `systemctl restart` (servis ile calisiyorsa) ya da process
+restart yeterli. ESP32-CAM HTTPS POST destegi v2'de eklenecek (heap +
+self-signed CA dagitimi planlaniyor); o zamana kadar CAM plain HTTP'de
+kalir, dolayisiyla CAM <-> YOLO yine LAN sinirina hapsedilmeli.
+
+### 3. Cert Yenileme
+
+Script default 1 yil verir. Suresi dolarsa `gen-certs.sh` tekrar calistir,
+`/etc/mosquitto/certs/` icindeki dosyalari uzerine yaz, mosquitto'yu restart
+et. Mobil/CAM tarafinda CA degismediyse trust ayari korunur.
 
 ## Baglanti Ozeti
 

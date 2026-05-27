@@ -53,7 +53,9 @@ Node-RED veya mobil uygulama tarafindan gonderilir. PLC firmware'i bu topic'lere
 | Topic | Aciklama | Payload |
 |-------|----------|---------|
 | `akilli-sinif/{id}/control/led` | LED parlaklik ayari | `{"brightness": 80}` veya `{"state": "on"}` / `{"state": "off"}` |
-| `akilli-sinif/{id}/control/fan` | Fan hiz ayari | `{"speed": 60}` veya `{"state": "on"}` / `{"state": "off"}` |
+| `akilli-sinif/{id}/control/cooling` | Sogutma rolesi (12V DC fan) | `{"state": "on"}` / `{"state": "off"}` |
+| `akilli-sinif/{id}/control/heating` | Isitma rolesi (22ohm 5W direnc) | `{"state": "on"}` / `{"state": "off"}` |
+| `akilli-sinif/{id}/control/mode` | Otomatik / manuel mod | `{"auto": true}` / `{"auto": false}` |
 | `akilli-sinif/{id}/control/alert` | Gorsel uyari sistemi | Asagida detayli |
 | `akilli-sinif/{id}/control/ota` | OTA firmware guncelleme | Asagida detayli |
 | `akilli-sinif/{id}/control/reset` | Config sifirlama | `{"action": "reset_config"}` |
@@ -81,19 +83,35 @@ Node-RED veya mobil uygulama tarafindan gonderilir. PLC firmware'i bu topic'lere
 - `state: "off"` gonderildiginde LED kapanir
 - `brightness` alaniyla 0-100 arasi hassas ayar yapilabilir
 
-### Fan Kontrolu
+### Cooling / Heating Kontrolu
+
+PLC v1.3.0+ icinde fan PWM yerine **iki ayri role** ile kontrol edilir:
 
 ```json
-// Hiz ayarla (0-100)
-{"speed": 60}
+// Sogutma rolesi (12V DC fan)
+{"state": "on"}   // role kapanir, fan calisir
+{"state": "off"}  // role acilir, fan durur
 
-// Ac / kapat
-{"state": "on"}   // %50 hizda baslar
-{"state": "off"}  // kapatir
+// Isitma rolesi (22ohm 5W direnc)
+{"state": "on"}   // role kapanir, direnc isinir
+{"state": "off"}  // role acilir, direnc soguma
 ```
 
-- `state: "on"` gonderildiginde fan %50 hizda calisir
-- `state: "off"` gonderildiginde fan durur
+**Otomatik / manuel mod:**
+
+```json
+{"auto": true}   // PLC kendi histeresisi ile karar verir
+{"auto": false}  // Sadece dis komutla acilir/kapanir
+```
+
+PLC firmware'inin yerlesik histeresis esikleri:
+
+| Aktuator | ON esigi | OFF esigi |
+|----------|----------|-----------|
+| Cooling  | T > 26°C | T < 24°C |
+| Heating  | T < 20°C | T > 22°C |
+
+`mode.auto = false` iken bu mantik atlanir; sadece `control/cooling` ve `control/heating` komutlari uygulanir.
 
 ### Gorsel Uyari (Alert)
 
@@ -162,11 +180,15 @@ Degisiklikler aninda NVS'e kaydedilir, restart gerekmez (mqtt_broker haric).
 ## 3. Aktuator Durumlari (ESP32 > Sunucu)
 
 PLC firmware'i aktuator degistiginde bu topic'lere yayinlar. Kategori: `actuators`.
+**Hepsi `retain=true` yayinlanir** — broker son durumu tutar, dashboard ve ESP32 reboot
+sonrasi senkron kalir. Hem online MQTT komutu (`control/*`) hem de fiziksel duvar anahtari
+(GPIO 5/16/19 push button toggle) ayni state'i degistirir ve bu topic'leri tetikler.
 
-| Topic | Aciklama | Payload |
-|-------|----------|---------|
-| `akilli-sinif/{id}/actuators/led` | LED mevcut durumu | `{"value": 80, "unit": "%", "timestamp": 123456}` |
-| `akilli-sinif/{id}/actuators/fan` | Fan mevcut durumu | `{"value": 60, "unit": "%", "timestamp": 123456}` |
+| Topic | Aciklama | Payload | Retained |
+|-------|----------|---------|----------|
+| `akilli-sinif/{id}/actuators/led` | LED mevcut durumu | `{"value": 80, "unit": "%", "timestamp": 123456}` | Evet |
+| `akilli-sinif/{id}/actuators/cooling` | Sogutma rolesi durumu | `{"state": "on"}` veya `{"state": "off"}` | Evet |
+| `akilli-sinif/{id}/actuators/heating` | Isitma rolesi durumu | `{"state": "on"}` veya `{"state": "off"}` | Evet |
 
 ---
 
@@ -253,9 +275,10 @@ PLC firmware'inin `subscribeToControlTopics()` fonksiyonu su topic'lere abone ol
 
 ```
 akilli-sinif/{id}/control/led
-akilli-sinif/{id}/control/fan
+akilli-sinif/{id}/control/cooling
+akilli-sinif/{id}/control/heating
+akilli-sinif/{id}/control/mode
 akilli-sinif/{id}/control/alert
-akilli-sinif/{id}/control/all
 akilli-sinif/{id}/control/ota
 akilli-sinif/{id}/control/reset
 akilli-sinif/{id}/sensors/camera        # Kisi sayisini almak icin
@@ -328,10 +351,20 @@ mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
   -t "akilli-sinif/sinif-1/control/led" \
   -m '{"brightness": 50}'
 
-# Fan'i kapat
+# Sogutmayi ac
 mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
-  -t "akilli-sinif/sinif-1/control/fan" \
+  -t "akilli-sinif/sinif-1/control/cooling" \
+  -m '{"state": "on"}'
+
+# Isitmayi kapat
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
+  -t "akilli-sinif/sinif-1/control/heating" \
   -m '{"state": "off"}'
+
+# Manuel moda gec (otomatik histeresis devre disi)
+mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \
+  -t "akilli-sinif/sinif-1/control/mode" \
+  -m '{"auto": false}'
 
 # Tehlike uyarisi gonder
 mosquitto_pub -h localhost -u nodered -P "$NODERED_PASS" \

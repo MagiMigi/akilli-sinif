@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/MagiMigi/akilli-sinif?include_prereleases)](https://github.com/MagiMigi/akilli-sinif/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-ESP32 tabanlı IoT sistemi. Sınıflarda sensör verilerine göre otomatik ışık/fan kontrolü, kamera ile doluluk takibi ve enerji tasarrufu sağlar. Tek firmware binary ile N adet sınıfı yönetir; güncellemeler kablosuz (OTA) yapılır.
+ESP32 tabanlı IoT sistemi. Sınıflarda sensör verilerine göre otomatik ışık + soğutma/ısıtma kontrolü, kamera ile doluluk takibi ve enerji tasarrufu sağlar. Tek firmware binary ile N adet sınıfı yönetir; güncellemeler kablosuz (OTA) yapılır.
 
 ---
 
@@ -36,7 +36,7 @@ ESP32-CAM ──┘                    └── YOLOv8 (kişi sayma)
 
 | Bileşen | Görev |
 |---------|-------|
-| **ESP32-PLC** | Sensörlerden veri okur, LED/fan'ı kontrol eder, TFT ekranda durum gösterir |
+| **ESP32-PLC** | Sensörlerden veri okur, LED + soğutma/ısıtma rölelerini kontrol eder, TFT ekranda durum gösterir |
 | **ESP32-CAM** | Kamera görüntüsünü YOLOv8'e gönderir, kişi sayısını MQTT'ye yayınlar |
 | **ESP32-SIM** | Gerçek donanım olmadan sinüs bazlı simülasyon üretir (test amaçlı) |
 | **Node-RED** | Tüm cihazları orkestre eder, otomasyon kurallarını uygular, OTA yönetir |
@@ -58,9 +58,12 @@ ESP32-CAM ──┘                    └── YOLOv8 (kişi sayma)
 | PIR | 1 | Hareket algılama |
 | Reed Switch | 1 | Pencere durumu |
 | TFT Ekran (ST7735 1.44") | 1 | Durum göstergesi |
-| LED Strip (12V) + DC Fan (12V) | 1+1 | Aktüatörler |
+| LED Strip (12V) + 12V DC Fan + 22Ω 5W direnc | 1+1+1 | Strip LED, soğutma fanı, ısıtıcı eleman |
 | 12V Adaptör + XL4015 | 1+1 | Güç: 12V → 5V |
-| IRLZ44N MOSFET | 2 | LED + fan sürücü |
+| IRLZ44N MOSFET | 1 | Strip LED sürücü |
+| BC337 + JRC-19F 5V röle | 2+2 | Soğutma + ısıtma |
+| 1.5A cam sigorta + 15V TVS + 0.1Ω shunt | 1+1+1 | 12V hat koruma + akım ölçüm |
+| LM358 op-amp | 1 | Akım sensörü amplifikatörü |
 
 Devre semalari ve pin haritalari: **[docs/donanim.md](docs/donanim.md)**
 
@@ -171,12 +174,12 @@ Ayarlar NVS'e kalıcı kaydedilir. Sıfırlamak için: **GPIO0 (BOOT) butonuna 5
 Sınıf bazında gerçek zamanlı izleme:
 - Sıcaklık, nem, ışık seviyesi, hava kalitesi
 - Kişi sayısı (YOLOv8)
-- LED ve fan durumu
+- LED, soğutma ve ısıtma röle durumu
 
 ### Node-RED ile Kontrol
 
 http://localhost:1880 adresinde:
-- Inject node'larına tıklayarak sınıflara komut gönder (ışık, fan)
+- Inject node'larına tıklayarak sınıflara komut gönder (ışık, soğutma, ısıtma)
 - OTA güncelleme tetikle
 - Cihaz durumlarını izle
 
@@ -244,9 +247,10 @@ Sonraki güncellemeler OTA ile kablosuz yapılır.
 
 | Bileşen | Pin | Tür |
 |---------|-----|-----|
-| DHT22 | GPIO4 | Dijital |
+| DHT11 | GPIO4 | Dijital |
 | LDR | GPIO34 | Analog |
 | MQ-135 | GPIO35 | Analog |
+| LM358 (akım) | GPIO36 | Analog (VP) |
 | PIR | GPIO27 | Dijital |
 | Reed Switch | GPIO26 | Dijital |
 
@@ -254,8 +258,19 @@ Sonraki güncellemeler OTA ile kablosuz yapılır.
 
 | Bileşen | Pin | Tür |
 |---------|-----|-----|
-| LED Strip | GPIO13 | PWM |
-| DC Fan | GPIO12 | PWM |
+| Strip LED + indikator LED | GPIO13 | PWM (PC817 + IRLZ44N) |
+| Cooling rölesi (12V fan) | GPIO21 | Dijital (BC337 + JRC-19F) |
+| Heating rölesi (22Ω 5W) | GPIO22 | Dijital (BC337 + JRC-19F) |
+
+**Butonlar / Özel:**
+
+| Pin | Fonksiyon |
+|-----|-----------|
+| GPIO0 | Config sıfırlama (BOOT) |
+| GPIO25 | Menü NEXT |
+| GPIO14 | Menü PREV |
+
+**TFT (SPI):** CS=17, DC=33, RST=32, MOSI=23, SCLK=18
 ### TFT Ekran Durum Göstergeleri
 
 | Durum | Ekran |
@@ -292,6 +307,28 @@ akilli-sinif/
 │   └── donanim.md               # Pin haritalari ve devre semalari
 └── akilli-start.sh              # Tüm servisleri başlat
 ```
+
+---
+
+## Mobil Uygulama (Android)
+
+`mobile-app/` klasörü altında React Native + Expo ile yazılmış profesyonel bir Android uygulaması bulunur. Mosquitto'ya WebSocket (port 9001) üzerinden doğrudan bağlanır; tüm sınıfları canlı izler, LED + soğutma/ısıtma kontrolü, alert, OTA ve config-reset işlevleri sunar.
+
+**Kurulum + APK build:** [mobile-app/README.md](mobile-app/README.md)
+
+```bash
+cd mobile-app
+npm install
+npx expo start          # Expo Go ile QR oku
+# Production APK:
+eas build -p android --profile preview
+```
+
+İlk açılışta Setup ekranında:
+- Broker IP/host (sunucunun LAN IP'si, ör. `192.168.1.100`)
+- Port: `9001`
+- Kullanıcı: `mobile` (ACL'de tanımlı)
+- Şifre: `mosquitto_passwd` ile belirlediğin
 
 ---
 

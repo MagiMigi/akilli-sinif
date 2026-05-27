@@ -1,7 +1,8 @@
 {
+  "_note": "Bu dosya tasarim ve tez referansidir. Calisma zamaninda hicbir bilesen (firmware / Node-RED / mobil / YOLO) bu dosyayi okumaz. Esikleri ve pin atamalarini bilesenler kendi koduna gomulu olarak tasir. Burada bir alani degistirmek davranisi degistirmez — ilgili bileseni de guncelleyin.",
   "project": {
     "name": "Akıllı Sınıf Sistemi",
-    "version": "1.2.0",
+    "version": "1.2.4",
     "description": "IoT tabanlı akıllı sınıf otomasyon sistemi"
   },
   "mqtt": {
@@ -49,7 +50,7 @@
           "enabled": true,
           "ip": "auto",
           "sensors": ["temperature", "humidity", "light", "air_quality", "pir", "window"],
-          "actuators": ["led", "fan"]
+          "actuators": ["led", "cooling", "heating"]
         },
         "esp32_cam": {
           "enabled": true,
@@ -77,7 +78,7 @@
           "enabled": true,
           "ip": "auto",
           "sensors": ["temperature", "humidity", "light", "air_quality", "pir", "window"],
-          "actuators": ["led", "fan"]
+          "actuators": ["led", "cooling", "heating"]
         },
         "esp32_cam": {
           "enabled": false
@@ -140,12 +141,21 @@
       "max_brightness": 100,
       "default_brightness": 80
     },
-    "fan": {
-      "pwm_frequency": 25000,
-      "pwm_resolution": 8,
-      "min_speed": 0,
-      "max_speed": 100,
-      "default_speed": 50
+    "cooling": {
+      "type": "relay",
+      "active_level": "HIGH",
+      "gpio": 21,
+      "driver": "BC337 NPN low-side + JRC-19F 5V coil + 1N4007 flyback",
+      "contact": "NO (normally open) - coil enerjisizken yuk KAPALI, guvenli baslangic",
+      "load": "12V DC fan + paralel LED gosterge + DC fana paralel ters 1N4007"
+    },
+    "heating": {
+      "type": "relay",
+      "active_level": "HIGH",
+      "gpio": 22,
+      "driver": "BC337 NPN low-side + JRC-19F 5V coil + 1N4007 flyback",
+      "contact": "NO (normally open) - coil enerjisizken yuk KAPALI, guvenli baslangic",
+      "load": "22 ohm 5W direnc + paralel LED gosterge (direnc parazit yok, paralel diyot YOK)"
     }
   },
   "automation": {
@@ -156,10 +166,14 @@
       "auto_off_threshold": 400,
       "require_presence": true
     },
-    "fan_control": {
+    "thermal_control": {
       "enabled": true,
-      "temp_threshold_on": 26,
-      "temp_threshold_off": 24,
+      "cool_on": 26,
+      "cool_off": 24,
+      "heat_on": 20,
+      "heat_off": 22,
+      "manual_override_minutes": 5,
+      "block_if_window_open": true,
       "air_quality_threshold": 200
     },
     "ac_control": {

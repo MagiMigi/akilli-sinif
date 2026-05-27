@@ -73,16 +73,17 @@ jobs:
           MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
         run: |
           if [ -z "$MQTT_PASSWORD" ]; then
-            echo "::warning::MQTT_PASSWORD repo secret tanimsiz — secrets.h.example kullanilir (CHANGE_ME placeholder)."
-            cp firmware/secrets.h.example firmware/secrets.h
-          else
-            cat > firmware/secrets.h <<EOF
+            echo "::error::MQTT_PASSWORD repo secret tanimsiz — build durduruluyor."
+            echo "::error::Production firmware'in placeholder parolasi ile derlenip dagitilmasini onlemek icin secret zorunlu."
+            echo "::error::Settings > Secrets and variables > Actions altinda MQTT_PASSWORD ekleyin."
+            exit 1
+          fi
+          cat > firmware/secrets.h <<EOF
           #pragma once
           #define MQTT_USER_DEFAULT      "esp32"
           #define MQTT_PASSWORD_DEFAULT  "$MQTT_PASSWORD"
           EOF
-            echo "secrets.h CI secret'tan olusturuldu."
-          fi
+          echo "secrets.h CI secret'tan olusturuldu."
 
       - name: Apply custom TFT_eSPI User_Setup.h (PLC only)
         if: matrix.name == 'ESP32-PLC'
