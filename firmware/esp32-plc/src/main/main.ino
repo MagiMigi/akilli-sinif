@@ -43,6 +43,7 @@
 #include <SPI.h>
 #include <TFT_eSPI.h>  // TFT kutuphanesi
 #include <DHT.h>       // DHT sicaklik/nem sensoru
+#include <stdarg.h>    // logRemote(...) varargs
 #include "ota_manager.h"  // OTA guncelleme modulu
 #include "../../../version.h"   // Firmware versiyon
 #include "../../../secrets.h"   // MQTT user/sifre — repo'ya commit'lenmez
@@ -51,6 +52,9 @@
 // dosyanin tepesine koyar. Struct asagida tanimli oldugu icin tipi
 // burada bildirmek gerek.
 struct ButtonState;
+
+// Forward decl: varargs (...) icin auto-prototype calismaz, manuel lazim
+void logRemote(const char* fmt, ...);
 
 // ============================================
 // YAPILANDIRMA - NVS'DEN OKUNUR (hardcoded degil!)
@@ -231,6 +235,10 @@ int reconnectAttempts = 0;
 const int MAX_RECONNECT_ATTEMPTS = 5;
 unsigned long lastMqttReconnectAttempt = 0;
 const unsigned long MQTT_RECONNECT_INTERVAL = 5000;  // 5 saniye bekle yeniden denemeden once
+
+// Olcum / debug log degiskenleri (3.1 Sistem Performansi olcumleri icin)
+unsigned long g_wifiDownAtMs = 0;   // WiFi kopma anindaki millis() (reconnect olcumu)
+unsigned long g_mqttDownAtMs = 0;   // MQTT kopma anindaki millis()
 
 // Ekran renkleri
 #define COLOR_BG        TFT_BLACK
@@ -1574,12 +1582,17 @@ void setupWiFi() {
 void checkWiFi() {
   wl_status_t st = WiFi.status();
   if (st != WL_CONNECTED) {
-    if (wifiConnected) Serial.println("[WiFi] Baglanti koptu! reconnect tetiklendi.");
+    if (wifiConnected) {
+      Serial.println("[WiFi] Baglanti koptu! reconnect tetiklendi.");
+      g_wifiDownAtMs = millis();  // 3.1 olcum: kopma anini kaydet
+    }
     wifiConnected = false;
     WiFi.reconnect();
   } else if (!wifiConnected) {
     wifiConnected = true;
     Serial.println("[WiFi] Yeniden baglandi.");
+    // logRemote burada calismaz: mqttConnected hala false.
+    // Reconnect olcumu MQTT geri donunce connectMQTT() icinde yayinlanir.
   }
 }
 
@@ -1590,17 +1603,23 @@ void checkWiFi() {
 // MQTT mesaj callback fonksiyonu
 // Bu fonksiyon, subscribe olunan topic'lere mesaj geldiginde cagrilir
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  // 3.1 olcum: MQTT komut alis timestamp'i (actuator cevap gecikmesi icin baz)
+  unsigned long _cb_t0 = millis();
+
   // Gelen mesaji string'e cevir
   String message = "";
   for (int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
-  
+
   Serial.println("\n>>> MQTT MESAJ ALINDI <<<");
   Serial.print("Topic: ");
   Serial.println(topic);
   Serial.print("Mesaj: ");
   Serial.println(message);
+
+  // Uzaktan log (Wi-Fi uzeri Serial yerine)
+  logRemote("CMD rx topic=%s len=%u", topic, length);
 
   // JSON olarak parse et (1 KB — haftalik plan icin buyuk)
   DynamicJsonDocument doc(1024);
@@ -1648,8 +1667,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         Serial.println("LED KAPATILDI");
       }
     }
+    logRemote("LAT cmd->led dt=%lu ms", millis() - _cb_t0);
   }
-  
+
   // Cooling Role Kontrolu (12V DC fan, BC337 + JRC-19F)
   // Topic: akilli-sinif/sinif-1/control/cooling   payload: {"state":"on"|"off"}
   else if (topicStr.endsWith("/control/cooling")) {
@@ -1657,6 +1677,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (parseOnOff(doc, on)) {
       manualOverrideUntil = millis() + MANUAL_OVERRIDE_MS;
       setCooling(on);
+      logRemote("LAT cmd->cooling state=%s dt=%lu ms", on?"on":"off", millis() - _cb_t0);
     }
   }
 
@@ -1667,6 +1688,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (parseOnOff(doc, on)) {
       manualOverrideUntil = millis() + MANUAL_OVERRIDE_MS;
       setHeating(on);
+      logRemote("LAT cmd->heating state=%s dt=%lu ms", on?"on":"off", millis() - _cb_t0);
     }
   }
 
@@ -1842,6 +1864,13 @@ void connectMQTT() {
     pageDirty = true;
     subscribeToControlTopics();
     publishStatus("online");
+
+    // 3.1 olcum: WiFi kopma → MQTT geri donme toplam suresi (varsa)
+    if (g_wifiDownAtMs != 0) {
+      logRemote("WIFI reconnect downtime=%lu ms", millis() - g_wifiDownAtMs);
+      g_wifiDownAtMs = 0;
+    }
+    logRemote("MQTT connected attempts=%d", reconnectAttempts);
   } else {
     reconnectAttempts++;
     Serial.printf("BASARISIZ (hata=%d, deneme=%d)\n",
@@ -2203,8 +2232,11 @@ bool parseOnOff(JsonDocument& doc, bool& out) {
 // ============================================
 
 void publishSensorData() {
+  // 3.1 olcum: sensor okuma + MQTT yayin toplam gecikmesi
+  unsigned long _pub_t0 = millis();
+
   // Her sensor icin ayri topic'e yayinla
-  
+
   // Sicaklik
   StaticJsonDocument<128> tempDoc;
   tempDoc["value"] = temperature;
@@ -2285,6 +2317,9 @@ void publishSensorData() {
   Serial.print("V) | Guc: ");
   Serial.print(powerWatts, 2);
   Serial.println(" W");
+
+  // 3.1 olcum: tum sensor JSON publish'lerinin toplam suresi
+  logRemote("PUB sensors dt=%lu ms", millis() - _pub_t0);
 }
 
 void publishActuatorStatus(const char* actuator, int value) {
@@ -2324,6 +2359,27 @@ void publishJson(String topic, JsonDocument& doc, bool retained) {
 // Overload: retained varsayilan false
 void publishJson(String topic, JsonDocument& doc) {
   publishJson(topic, doc, false);
+}
+
+// ============================================
+// UZAKTAN DEBUG LOG (Wi-Fi uzeri Serial Monitor yerine)
+// ============================================
+// Topic: akilli-sinif/<sinif_id>/debug/log
+// Dinle: mosquitto_sub -h <broker> -t 'akilli-sinif/+/debug/log' -v
+// Tez 3.1 olcumlerinin gercek donanim kanitlari icin kullanilir.
+void logRemote(const char* fmt, ...) {
+  if (!mqttConnected) return;  // baglanti yokken yutar (UART log devam eder)
+  char msg[200];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(msg, sizeof(msg), fmt, args);
+  va_end(args);
+
+  StaticJsonDocument<256> doc;
+  doc["t_ms"]   = millis();
+  doc["dev"]    = mqttClientId;
+  doc["msg"]    = msg;
+  publishJson(buildTopic("debug", "log"), doc);
 }
 
 // ============================================
