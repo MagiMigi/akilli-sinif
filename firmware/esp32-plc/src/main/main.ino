@@ -265,6 +265,7 @@ int prevAirQuality = -999;
 int prevPersonCount = -999;
 bool prevMqttConnected = false;
 AlertLevel prevAlert = ALERT_NONE;
+int alertIconShown = 0;     // sag ust uyari ikonu ekranda gorunur mu (0/1) — blink takibi
 int prevMinute = -1;
 int prevDay    = -1;
 
@@ -466,12 +467,10 @@ void drawHeader(const char* title, uint16_t bg) {
     tft.print("P");
   }
 
-  // Uyari var ise baslikta "!" goster
-  if (currentAlert == ALERT_WARNING) {
-    tft.setTextColor(COLOR_WARNING, bg);
-    tft.setCursor(110, 1);
-    tft.print("!");
-  }
+  // Uyari ikonu (sag ust kose, yanip sonen "!") updateAlertIcon() tarafindan
+  // cizilir. Header fillScreen ile temizlendigi icin ikonu "gizli" isaretle;
+  // updateAlertIcon bir sonraki adimda gerekirse yeniden cizer.
+  alertIconShown = 0;
 
   // Satir 2: saat / gun / tarih (updateHeaderTime gercek degerleri basar)
   prevMinute = -1;
@@ -483,7 +482,7 @@ void drawHeader(const char* title, uint16_t bg) {
 
 // Header saat/tarih alanini partial-update: her tick'te cagrilir.
 void updateHeaderTime() {
-  uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
+  uint16_t bgColor = COLOR_BG;  // uyari ekran arka plan rengini degistirmez
 
   struct tm t;
   bool haveTime = getLocalTime(&t, 100);
@@ -565,7 +564,7 @@ void drawPaginationDots(uint8_t current, uint8_t total, bool paused) {
   const int dotsCenterX = 64;
   const int dotSpacing  = 16;
 
-  uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
+  uint16_t bgColor = COLOR_BG;  // uyari ekran arka plan rengini degistirmez
 
   // Bar arka planini temizle
   tft.fillRect(0, barY, 128, barH, bgColor);
@@ -596,7 +595,7 @@ void drawPaginationDots(uint8_t current, uint8_t total, bool paused) {
 // ---- Sayfa: HOME (ana ekran) ----
 // Saat+tarih header (ortak drawHeader) + buyuk ders blogu + sensor seridi + status dot
 void renderHome(bool full) {
-  uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
+  uint16_t bgColor = COLOR_BG;  // uyari ekran arka plan rengini degistirmez
 
   if (full) {
     tft.fillScreen(bgColor);
@@ -700,7 +699,7 @@ void renderHome(bool full) {
 
 // ---- Sayfa: ANA EKRAN (saat/tarih + kisi + sensor) ----
 void renderSensors(bool full) {
-  uint16_t bgColor = (currentAlert == ALERT_WARNING) ? COLOR_ALERT_BG : COLOR_BG;
+  uint16_t bgColor = COLOR_BG;  // uyari ekran arka plan rengini degistirmez
 
   if (full) {
     tft.fillScreen(bgColor);
@@ -957,24 +956,9 @@ void renderAnnounce(bool full) {
 
 // ---- Ana dispatcher ----
 void updateDisplay() {
-  // Tehlike: tum ekrani kaplar, sayfalari gecici olarak gizle
-  if (currentAlert == ALERT_DANGER) {
-    if (alertBlinkState) {
-      tft.fillScreen(COLOR_DANGER);
-      tft.setTextColor(COLOR_TEXT, COLOR_DANGER);
-      tft.setTextSize(2);
-      tft.setCursor(15, 30);
-      tft.println("UYARI!");
-      tft.setTextSize(1);
-      tft.setCursor(10, 60);
-      tft.println(alertMessage);
-    } else {
-      pageDirty = true;  // tehlike bitince sayfayi yeniden ciz
-    }
-    prevAlert = currentAlert;
-    return;
-  }
-
+  // Uyari (warning/danger) ekran rengini/sayfasini DEGISTIRMEZ; sadece sag
+  // ust kosede renkli "!" ikonu gosterilir (bkz. drawHeader). Alert seviyesi
+  // degisince sayfayi tam yeniden ciz ki kose ikonu guncellensin.
   if (currentAlert != prevAlert) {
     pageDirty = true;
     prevAlert = currentAlert;
@@ -994,6 +978,9 @@ void updateDisplay() {
 
   // Header saat/tarih - her tick'te tum sayfalarda guncel
   updateHeaderTime();
+
+  // Tam yeniden cizimden sonra uyari ikonunu hemen geri getir (blink loop'ta surer)
+  updateAlertIcon();
 
   pageDirty = false;
 }
@@ -1238,6 +1225,26 @@ void updateAlertLED() {
   if (millis() - lastAlertBlink >= blinkInterval) {
     lastAlertBlink = millis();
     alertBlinkState = !alertBlinkState;
+  }
+}
+
+// Sag ust kosedeki yanip sonen uyari ikonu ("!"). Loop'ta sik cagrilir
+// (updateAlertLED ile ayni cadansta), boylece ikon blink eder.
+// alertBlinkState updateAlertLED() tarafindan toggle edilir.
+// Warning = turuncu, Danger = kirmizi. Ekranin geri kalanina dokunmaz.
+void updateAlertIcon() {
+  bool active = (currentAlert == ALERT_WARNING || currentAlert == ALERT_DANGER);
+  int desired = (active && alertBlinkState) ? 1 : 0;
+  if (desired == alertIconShown) return;   // degisim yok -> bos yere cizme
+
+  alertIconShown = desired;
+  if (desired == 1) {
+    tft.setTextSize(1);
+    tft.setTextColor((currentAlert == ALERT_DANGER) ? COLOR_DANGER : TFT_ORANGE, COLOR_BG);
+    tft.setCursor(112, 1);
+    tft.print("!");
+  } else {
+    tft.fillRect(112, 1, 8, 8, COLOR_BG);  // ikonu sil
   }
 }
 
@@ -2529,4 +2536,7 @@ void loop() {
   
   // Uyari LED guncellemesi (surekli calistir)
   updateAlertLED();
+
+  // Sag ust uyari ikonunu yanip sondur (LED ile ayni cadans)
+  updateAlertIcon();
 }
