@@ -24,6 +24,12 @@ topic write akilli-sinif/+/status/#
 # Uzaktan debug log (Wi-Fi uzeri Serial Monitor — tez 3.1 olcumleri)
 topic write akilli-sinif/+/debug/#
 
+# Diagnostik okuma — laptop'tan mosquitto_sub ile dinleyebilmek icin
+# (tez 3.1 olcum screenshot'lari, sahada debug)
+topic read  akilli-sinif/+/sensors/#
+topic read  akilli-sinif/+/status/#
+topic read  akilli-sinif/+/debug/#
+
 # Control komutlarini DINLE (sadece okuma — yazma yok!)
 topic read  akilli-sinif/+/control/#
 topic read  akilli-sinif/all/control/#
