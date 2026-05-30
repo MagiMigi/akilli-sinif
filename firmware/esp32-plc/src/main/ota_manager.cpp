@@ -119,15 +119,53 @@ bool OTAManager::performUpdate(const String& url, const String& version,
         Serial.println("[OTA] Sidecar MD5: " + md5);
     }
 
+    Serial.printf("[OTA] Bos heap (baslangic): %u bytes\n", ESP.getFreeHeap());
+
+    // GitHub release indirmeleri 302 ile github.com -> release-assets.githubusercontent.com
+    // yonlendirir. AYNI WiFiClientSecure'u redirect'te yeniden kullanmak ESP32
+    // HTTPClient'ta http_error_-1 (connection refused) verir (bilinen reuse bug).
+    // COZUM: redirect'i ELLE coz — once Location'i al, sonra TAZE client ile indir.
+    String finalUrl = url;
+    {
+        WiFiClientSecure rclient;
+        rclient.setInsecure();
+        HTTPClient rhttp;
+        rhttp.begin(rclient, url);
+        rhttp.setTimeout(20000);
+        rhttp.setConnectTimeout(15000);
+        rhttp.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);  // Location'i biz okuyacagiz
+        const char* collect[] = { "Location" };
+        rhttp.collectHeaders(collect, 1);
+        int rcode = rhttp.GET();
+        Serial.printf("[OTA] Redirect cozumu: HTTP %d\n", rcode);
+        if (rcode < 0) {
+            // github.com'a TLS baglantisi bile kurulamadi (DNS / heap / TLS)
+            String errMsg = "connect_fail_" + String(rcode);
+            Serial.println("[OTA] github.com baglanti hatasi: " + errMsg);
+            publishStatus("failed", -1, version, errMsg);
+            rhttp.end();
+            return false;
+        }
+        if (rcode == HTTP_CODE_FOUND || rcode == HTTP_CODE_MOVED_PERMANENTLY ||
+            rcode == HTTP_CODE_TEMPORARY_REDIRECT || rcode == 308) {
+            String loc = rhttp.header("Location");
+            if (loc.length() > 0) finalUrl = loc;
+            Serial.println("[OTA] Gercek indirme adresi: " + finalUrl);
+        }
+        rhttp.end();
+    }
+
     WiFiClientSecure client;
     client.setInsecure();  // GitHub cert chain degisken — MD5 + allowlist yeterli
     client.setTimeout(30);  // 30 saniye bağlantı timeout
 
     HTTPClient http;
-    http.begin(client, url);
+    http.begin(client, finalUrl);  // TAZE client + cozulmus adres
     http.setTimeout(60000);        // 60 sn indirme timeout
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // GitHub redirect'leri takip et
+    http.setConnectTimeout(15000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // ihtiyaten 2. redirect
 
+    Serial.printf("[OTA] Bos heap (indirme oncesi): %u bytes\n", ESP.getFreeHeap());
     Serial.println("[OTA] HTTP GET baslatiliyor...");
     int httpCode = http.GET();
 
