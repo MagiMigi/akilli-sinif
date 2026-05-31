@@ -1505,6 +1505,13 @@ void setupWiFi() {
   // Baglandiktan sonra 192.168.4.1 otomatik acar
   wm.setConfigPortalTimeout(180);  // 3 dakika icinde baglanilmazsa devam et
 
+  // ESP32 cold-boot'ta ILK WiFi baglanti denemesi sik sik gecici patlar
+  // (RF/scan henuz hazir degil). Retry vermezsek autoConnect direkt portal'a
+  // dusuyordu -> kullanici elle 2. reset atinca baglaniyordu. Asagisi onu
+  // otomatiklestirir: her deneme 15s, 3 kez dene; cogu zaman 2. denemede baglanir.
+  wm.setConnectTimeout(15);   // her baglanti denemesi icin 15s bekle
+  wm.setConnectRetries(3);    // portal'a dusmeden once 3 kez dene
+
   // NVS'teki force_portal bayragini oku (runtime BOOT 5sn ile set edilir)
   prefs.begin("akilli-sinif", false);
   bool forcePortalFlag = prefs.getBool("force_portal", false);
