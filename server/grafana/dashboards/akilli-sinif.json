@@ -102,7 +102,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"temperature\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"temperature\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -180,7 +180,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"humidity\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"humidity\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -254,7 +254,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -328,7 +328,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -409,7 +409,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"motion\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"motion\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -490,7 +490,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"window\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"window\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -612,7 +612,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"temperature\" or r._measurement == \"humidity\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"temperature\" or r._measurement == \"humidity\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
           "refId": "A"
         }
       ],
@@ -704,7 +704,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"light\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
           "refId": "A"
         }
       ],
@@ -797,7 +797,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"motion\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> yield(name: \"max\")",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"motion\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> yield(name: \"max\")",
           "refId": "A"
         }
       ],
@@ -900,7 +900,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"air_quality\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
           "refId": "A"
         }
       ],
@@ -994,7 +994,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -1m)\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> filter(fn: (r) => r._field == \"online\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -1m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r._field == \"online\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -1068,7 +1068,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> filter(fn: (r) => r._field == \"rssi\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r._field == \"rssi\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -1130,7 +1130,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r.classroom == \"sinif-1\")\n  |> filter(fn: (r) => r._field == \"uptime\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"device_status\")\n  |> filter(fn: (r) => r._field == \"uptime\")\n  |> last()",
           "refId": "A"
         }
       ],
@@ -1146,7 +1146,26 @@
     "esp32"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "classroom",
+        "label": "Sınıf",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "ffgfokah0gqv4c"
+        },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"sinif_data\", tag: \"classroom\")",
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": [],
+        "hide": 0,
+        "definition": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"sinif_data\", tag: \"classroom\")"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",

@@ -5,6 +5,16 @@
 - `akilli-sinif.json` — v1, ilk surum dashboard
 - `akilli-sinif-v2.json` — guncel, soguma/isitma role gostergeleri eklendi
 
+## Coklu Sinif (classroom degiskeni)
+
+Her iki dashboard da ust kisimda **`Sınıf`** dropdown'u (Grafana template degiskeni `classroom`) gosterir. Dropdown, InfluxDB'deki `classroom` tag degerlerini (`sinif-1`, `sinif-2`, ...) otomatik listeler ve tum paneller secili sinifa gore filtrelenir.
+
+- Degisken sorgusu: `schema.tagValues(bucket: "sinif_data", tag: "classroom")`
+- Tum panel sorgulari `|> filter(fn: (r) => r.classroom == "${classroom}")` satirini icerir.
+- Yeni bir sinif eklendiginde (yeni `sinif_id` ile veri akinca) dropdown'da kendiliginden gorunur, panel eklemeye gerek yok.
+
+> **Not:** `device_status` paneli (ESP32 Durumu / WiFi / Uptime) icin `classroom`'un InfluxDB'de **tag** olmasi gerekir. Bunu saglayan Node-RED `Status Format` fonksiyonu `flows-v3.json` icinde guncellendi — eski kayitlarda `classroom` field oldugundan filtrelenmez, flow'u yeniden deploy ettikten sonraki veriler dogru calisir.
+
 ## Onemli: Datasource UID
 
 Iki dashboard da InfluxDB datasource'u `ffgfokah0gqv4c` UID'siyle aramaktadir. Grafana'ya **import** sirasinda:
