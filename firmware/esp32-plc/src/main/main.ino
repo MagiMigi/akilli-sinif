@@ -1619,14 +1619,22 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     message += (char)payload[i];
   }
 
+  // ÖNEMLI: topic'i HEMEN kopyala. PubSubClient TEK bir dahili buffer kullanir;
+  // 'topic' ve 'payload' o buffer'i isaret eder. Callback icinden publish edince
+  // (asagidaki logRemote ve branch'lerdeki status yayinlari) ayni buffer'a yazilir
+  // ve 'topic' isaretcisi BOZULUR. Once String'e kopyalamazsak topicStr cop olur,
+  // hicbir /control/... branch'i eslesmez -> tum komutlar sessizce yutulur.
+  // (v1.3.3'te logRemote eklenince giren regresyon.)
+  String topicStr = String(topic);
+
   Serial.println("\n>>> MQTT MESAJ ALINDI <<<");
   Serial.print("Topic: ");
-  Serial.println(topic);
+  Serial.println(topicStr);
   Serial.print("Mesaj: ");
   Serial.println(message);
 
-  // Uzaktan log (Wi-Fi uzeri Serial yerine)
-  logRemote("CMD rx topic=%s len=%u", topic, length);
+  // Uzaktan log (Wi-Fi uzeri Serial yerine) — artik guvenli kopya kullaniyoruz
+  logRemote("CMD rx topic=%s len=%u", topicStr.c_str(), length);
 
   // JSON olarak parse et (1 KB — haftalik plan icin buyuk)
   DynamicJsonDocument doc(1024);
@@ -1637,10 +1645,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.println(error.c_str());
     return;
   }
-  
-  // Topic'e gore islem yap
-  String topicStr = String(topic);
-  
+
+  // Topic'e gore islem yap (topicStr yukarida, publish'ten ONCE kopyalandi)
+
   // Kamera/Kisi Sayisi Verisi
   // Topic: akilli-sinif/sinif-1/sensors/camera
   if (topicStr.endsWith("/sensors/camera")) {
