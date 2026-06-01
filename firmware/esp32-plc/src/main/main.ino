@@ -20,7 +20,7 @@
  * ILK KURULUM:
  *   1. Firmware'i yak
  *   2. "Akilli-Sinif-Setup" WiFi agina baglan
- *   3. Acilan portala gir: WiFi, MQTT IP, Sinif ID, Mock modu ayarla
+ *   3. Acilan portala gir: WiFi, MQTT IP, Sinif ID ayarla
  *   4. Kaydet — ESP32 yeniden baslar ve baglanir
  *
  * CONFIG SIFIRLAMA:
@@ -67,8 +67,6 @@ Preferences prefs;  // NVS okuma/yazma
 // Runtime'da NVS'den doludurulan degiskenler
 char MQTT_BROKER[40]   = "";
 char CLASSROOM_ID[20]  = "sinif-1";
-char MOCK_MODE_STR[6]  = "false";  // "true" / "false"
-bool MOCK_MODE         = false;
 
 // Sabit kalan degerler (degistirmen gerekirse portal'a da eklenebilir)
 const int   MQTT_PORT      = 1883;
@@ -1274,14 +1272,10 @@ void loadConfig() {
   prefs.begin("akilli-sinif", true);  // read-only
   String broker  = prefs.getString("mqtt_broker", "");
   String sinifId = prefs.getString("classroom_id", "sinif-1");
-  String mockStr = prefs.getString("mock_mode", "false");
   prefs.end();
 
   broker.toCharArray(MQTT_BROKER,   sizeof(MQTT_BROKER));
   sinifId.toCharArray(CLASSROOM_ID, sizeof(CLASSROOM_ID));
-  mockStr.toCharArray(MOCK_MODE_STR, sizeof(MOCK_MODE_STR));
-
-  MOCK_MODE = (mockStr == "true");
 
   // MQTT Client ID: sinif ID'sinden otomatik uret
   mqttClientId = "esp32-plc-" + sinifId;
@@ -1291,7 +1285,6 @@ void loadConfig() {
 
   Serial.println("[Config] Sinif ID: " + sinifId);
   Serial.println("[Config] MQTT Broker: " + broker);
-  Serial.println("[Config] Mock Modu: " + mockStr);
   Serial.println("[Config] Firmware: v" + OTAManager::getCurrentVersion());
 }
 
@@ -1354,7 +1347,7 @@ void checkConfigReset() {
 //   - TFT'de buyuk geri sayim 5..1 gosterir
 //   - NVS'e "force_portal" bayragi yazar
 //   - Cihaz yeniden baslar, setupWiFi() WiFi portal acar
-// Bayrak yaklasiminin avantaji: sinif_id / mock_mode / mqtt_broker
+// Bayrak yaklasiminin avantaji: sinif_id / mqtt_broker
 // silinmez — portal mevcut degerleri gosterir, kullanici sadece
 // degistirmek istedigini gunceller.
 unsigned long bootBtnPressStartMs   = 0;
@@ -1494,12 +1487,9 @@ void setupWiFi() {
                                      MQTT_BROKER, 39);
   WiFiManagerParameter p_classroomId("classroom_id", "Sinif ID (sinif-1, sinif-2...)",
                                       CLASSROOM_ID, 19);
-  WiFiManagerParameter p_mockMode("mock_mode", "Mock Modu (true/false)",
-                                   MOCK_MODE_STR, 5);
 
   wm.addParameter(&p_mqttBroker);
   wm.addParameter(&p_classroomId);
-  wm.addParameter(&p_mockMode);
 
   // Portal AP adi: "Akilli-Sinif-Setup"
   // Baglandiktan sonra 192.168.4.1 otomatik acar
@@ -1552,21 +1542,17 @@ void setupWiFi() {
   // WiFi baglandi — portal'dan gelen config degerlerini NVS'e kaydet
   String newBroker  = String(p_mqttBroker.getValue());
   String newSinifId = String(p_classroomId.getValue());
-  String newMock    = String(p_mockMode.getValue());
 
   // Bos gelmisse mevcut degerleri koru
   if (newBroker.length() > 0 || newSinifId.length() > 0) {
     prefs.begin("akilli-sinif", false);
     if (newBroker.length()  > 0) prefs.putString("mqtt_broker",   newBroker);
     if (newSinifId.length() > 0) prefs.putString("classroom_id",  newSinifId);
-    if (newMock.length()    > 0) prefs.putString("mock_mode",      newMock);
     prefs.end();
 
     // Degiskenleri guncelle
     newBroker.toCharArray(MQTT_BROKER,   sizeof(MQTT_BROKER));
     newSinifId.toCharArray(CLASSROOM_ID, sizeof(CLASSROOM_ID));
-    newMock.toCharArray(MOCK_MODE_STR,   sizeof(MOCK_MODE_STR));
-    MOCK_MODE = (newMock == "true");
     mqttClientId  = "esp32-plc-" + newSinifId;
     otaStatusTopic = "akilli-sinif/" + newSinifId + "/status/ota";
   }
@@ -1954,63 +1940,9 @@ float rawToAmps(int raw) {
 }
 
 void readSensors() {
-  if (MOCK_MODE) {
-    // Simule sensor verileri (test icin)
-    readMockSensors();
-  } else {
-    // Gercek sensor okuma
-    readRealSensors();
-  }
-}
-
-void readMockSensors() {
-  // Gercekci rastgele degerler uret
-  // random() fonksiyonu ile kucuk degisimler ekle
-  
-  // Sicaklik: 20-28 derece arasi, yavas degisim
-  static float baseTemp = 24.0;
-  baseTemp += (random(-10, 11) / 100.0);  // -0.1 ile +0.1 arasi
-  baseTemp = constrain(baseTemp, 20.0, 28.0);
-  temperature = baseTemp;
-  
-  // Nem: 40-60% arasi
-  static float baseHumidity = 50.0;
-  baseHumidity += (random(-20, 21) / 100.0);  // -0.2 ile +0.2 arasi
-  baseHumidity = constrain(baseHumidity, 40.0, 60.0);
-  humidity = baseHumidity;
-  
-  // Isik seviyesi: 0-1000 lux
-  // Gun icerisinde degisim simule et
-  int hour = (millis() / 60000) % 24;  // Dakikayi saat gibi kullan (hizlandirilmis)
-  if (hour >= 6 && hour <= 18) {
-    lightLevel = random(300, 800);  // Gunduz
-  } else {
-    lightLevel = random(0, 100);    // Gece
-  }
-  
-  // Hava kalitesi: 50-300 ppm
-  static int baseAirQuality = 100;
-  baseAirQuality += random(-5, 6);
-  baseAirQuality = constrain(baseAirQuality, 50, 300);
-  airQuality = baseAirQuality;
-  
-  // Hareket: rastgele (her 10 okumada bir degisim)
-  if (random(0, 10) == 0) {
-    motionDetected = !motionDetected;
-  }
-  
-  // Pencere durumu: genellikle kapali, nadiren degisir
-  if (random(0, 50) == 0) {
-    windowOpen = !windowOpen;
-  }
-
-  // Akim: 0.4 - 0.9A arasinda yavas dolasim
-  static float baseAmps = 0.63f;
-  baseAmps += (random(-30, 31) / 1000.0f);  // -0.03 ile +0.03 arasi
-  baseAmps = constrain(baseAmps, 0.40f, 0.90f);
-  currentAmps = baseAmps;
-  rawCurrent = (int)((currentAmps - CAL_HIGH_OFFSET_A) / CAL_HIGH_SCALE_A);
-  powerWatts = SUPPLY_VOLTAGE * currentAmps;
+  // Mock modu kaldirildi — PLC her zaman gercek sensorleri okur.
+  // Simulasyon gerekiyorsa ayri esp32-simulator firmware'i kullanilir.
+  readRealSensors();
 }
 
 void readRealSensors() {
@@ -2088,7 +2020,7 @@ void setupSensors() {
   Serial.println("DHT11 sensoru baslatildi");
   
   // PIR sensoru - dijital giris
-  pinMode(PIN_PIR, INPUT);
+  pinMode(PIN_PIR, INPUT_PULLDOWN);  // takili degilken LOW -> floating yanlis hareketi onlenir
   Serial.println("PIR sensoru baslatildi");
   
   // Reed switch - dahili pull-up ile dijital giris
@@ -2361,7 +2293,7 @@ void publishStatus(const char* status) {
   doc["ip"]               = WiFi.localIP().toString();
   doc["rssi"]             = WiFi.RSSI();
   doc["uptime"]           = millis() / 1000;
-  doc["mock_mode"]        = MOCK_MODE;
+  doc["mock_mode"]        = false;  // PLC her zaman gercek donanim (Node-RED uyumu icin alan korunuyor)
   doc["firmware_version"] = FIRMWARE_VERSION;  // OTA versiyon takibi icin
 
   String topic = buildTopic("status", "connection");
@@ -2423,13 +2355,10 @@ void setup() {
   {
     prefs.begin("akilli-sinif", true);
     String sinifId = prefs.getString("classroom_id", "sinif-1");
-    String mockStr = prefs.getString("mock_mode", "false");
     String broker  = prefs.getString("mqtt_broker", "");
     prefs.end();
     sinifId.toCharArray(CLASSROOM_ID, sizeof(CLASSROOM_ID));
-    mockStr.toCharArray(MOCK_MODE_STR, sizeof(MOCK_MODE_STR));
     broker.toCharArray(MQTT_BROKER, sizeof(MQTT_BROKER));
-    MOCK_MODE    = (mockStr == "true");
     mqttClientId = "esp32-plc-" + sinifId;
     otaStatusTopic = "akilli-sinif/" + sinifId + "/status/ota";
   }
@@ -2442,7 +2371,7 @@ void setup() {
   Serial.print  ("║  Sinif:    ");
   Serial.println(CLASSROOM_ID);
   Serial.print  ("║  Mod:      ");
-  Serial.println(MOCK_MODE ? "SIMULASYON" : "GERCEK DONANIM");
+  Serial.println("GERCEK DONANIM");
   Serial.print  ("║  Firmware: v");
   Serial.println(FIRMWARE_VERSION);
   Serial.println("╚══════════════════════════════════════╝\n");
