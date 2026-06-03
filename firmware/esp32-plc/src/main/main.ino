@@ -158,19 +158,18 @@ float powerWatts = 0.0f;
 // 12V besleme gerilimi (sabit kabul)
 const float SUPPLY_VOLTAGE = 12.0f;
 
-// Akim olcumu piecewise-linear kalibrasyon
-// TODO(kalibrasyon): Asagidaki 5 sabit on-degerdir, sahada olcum yapilmadi.
-// Prosedur: docs/donanim.md "Akim sensoru kalibrasyonu" bolumu (~562-572).
-// Yontem: bilinen yuklerle (rolesiz, role aktif, role+strip aktif) gercek
-// akimi ampermetre ile olcup raw ADC ile karsilastirip dogrusal regresyon.
-// Kalibrasyon tarihini ve olcum noktalarini guncellerken buraya yaz.
-// rawCurrent < CAL_THRESHOLD_RAW   -> dusuk bolge (LM358 saturasyonu yakini)
-// rawCurrent >= CAL_THRESHOLD_RAW  -> yuksek bolge (lineer bolge)
-const int   CAL_THRESHOLD_RAW = 800;
-const float CAL_LOW_SCALE_A   = 0.00080f;   // A / raw
-const float CAL_LOW_OFFSET_A  = 0.0f;
-const float CAL_HIGH_SCALE_A  = 0.00095f;   // A / raw
-const float CAL_HIGH_OFFSET_A = -0.12f;
+// Akim olcumu: shunt + LM358 (gain ~20). Donanim tasarimi: 1.5A -> 3.0V ADC.
+// Akim, pin voltaji ile DOGRU ORANTILI -> A = V * AMPS_PER_VOLT.
+// Kalibrasyon noktasi: 1.5 A @ 3.0 V  ->  AMPS_PER_VOLT = 1.5 / 3.0 = 0.5 A/V
+//   ornek: 3.0V -> 1.5A,  1.8V -> 0.9A,  0V -> 0A
+// ADC: 11db atenuasyon, 12-bit -> tam olcek ~3.3V = 4095 raw.
+// Yeniden kalibrasyon: ampermetre ile gercek akimi olcup karsi pin voltajini
+// not al, CAL_AMPS / CAL_VOLTS noktasini guncelle.
+const float ADC_VREF      = 3.3f;                    // V, ADC_11db tam olcek
+const int   ADC_MAX       = 4095;                    // 12-bit
+const float CAL_AMPS      = 1.5f;                    // kalibrasyon akimi (A)
+const float CAL_VOLTS     = 3.0f;                    // o akimdaki pin voltaji (V)
+const float AMPS_PER_VOLT = CAL_AMPS / CAL_VOLTS;    // = 0.5 A/V
 
 // Kamera verisi (MQTT'den gelecek)
 int personCount = 0;
@@ -1927,14 +1926,10 @@ void subscribeToControlTopics() {
 // ============================================
 
 // LM358 cikisindaki ham ADC degerini akima (A) cevirir.
-// LM358 dusuk rail saturasyonu icin tek esikli iki bolgeli lineer fit.
+// pin voltaji = raw * Vref/4095, akim = voltaj * AMPS_PER_VOLT (1.5A @ 3V orani).
 float rawToAmps(int raw) {
-  float a;
-  if (raw < CAL_THRESHOLD_RAW) {
-    a = CAL_LOW_SCALE_A * raw + CAL_LOW_OFFSET_A;
-  } else {
-    a = CAL_HIGH_SCALE_A * raw + CAL_HIGH_OFFSET_A;
-  }
+  float pinVolts = raw * (ADC_VREF / (float)ADC_MAX);
+  float a = pinVolts * AMPS_PER_VOLT;
   if (a < 0.0f) a = 0.0f;
   return a;
 }
@@ -2266,7 +2261,7 @@ void publishSensorData() {
   Serial.print(" mA (raw=");
   Serial.print(rawCurrent);
   Serial.print(", ~");
-  Serial.print(rawCurrent * 3.3f / 4095.0f, 3);
+  Serial.print(rawCurrent * (ADC_VREF / (float)ADC_MAX), 3);
   Serial.print("V) | Guc: ");
   Serial.print(powerWatts, 2);
   Serial.println(" W");

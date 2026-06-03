@@ -12,6 +12,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), [Semantic Vers
 
 (degisiklik yok)
 
+## [2.1.6] - 2026-06-03
+
+### Fixed
+
+- **PLC akim olcumu kalibrasyonu (PLC v1.3.6)** — `rawToAmps` placeholder
+  piecewise-linear sabitleri (`CAL_*`, sahada olculmemis) ~1:1 voltaj→akim
+  orani veriyordu (1.8V girisinde ~2A okuyordu). Donanim tasarimina gore
+  (shunt + LM358, `1.5A → 3.0V`) oran-tabanli tek lineer fit ile degistirildi:
+  `A = pinVolt × AMPS_PER_VOLT` (`AMPS_PER_VOLT = 1.5/3.0 = 0.5 A/V`).
+  Kalibrasyon noktasi (`CAL_AMPS`/`CAL_VOLTS`) koda acikca yazildi. Artik
+  3.0V → 1.5A, 1.8V → 0.9A, 0V → 0A.
+
 ## [2.1.0] - 2026-05-18
 
 ### Added
