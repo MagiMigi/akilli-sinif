@@ -12,6 +12,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), [Semantic Vers
 
 (degisiklik yok)
 
+## [2.2.1] - 2026-06-05
+
+### Fixed
+
+- **CI firmware derlemesi (ESP32-CAM)** — CI'in ürettiği `firmware/secrets.h`
+  yalnızca MQTT tanımlarını içeriyordu; `esp32-cam` v2.2.0 TLS kodu `YOLO_CA_CERT`'e
+  referans verince derleme `'YOLO_CA_CERT' was not declared` ile patlıyordu (yerel
+  `secrets.h`'da tanımlı olduğu için lokal build geçmişti). Üretilen `secrets.h`'a
+  ve `secrets.h.example`'a `YOLO_CA_CERT` eklendi. Firmware davranışı aynı
+  (boş → `setInsecure`); CAM v1.2.0 değişmez.
+
 ## [2.2.0] - 2026-06-05
 
 ### Added
