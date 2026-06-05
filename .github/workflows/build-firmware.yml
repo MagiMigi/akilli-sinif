@@ -82,6 +82,9 @@ jobs:
           #pragma once
           #define MQTT_USER_DEFAULT      "esp32"
           #define MQTT_PASSWORD_DEFAULT  "$MQTT_PASSWORD"
+          // ESP32-CAM YOLO yukleme TLS CA sertifikasi. Bos = setInsecure
+          // (sifreli, MITM korumasiz). CA pinning icin repo secret'tan doldur.
+          static const char YOLO_CA_CERT[] = "";
           EOF
           echo "secrets.h CI secret'tan olusturuldu."
 
