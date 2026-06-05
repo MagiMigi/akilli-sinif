@@ -16,7 +16,12 @@ function formatReading(r: AnyReading | undefined): string {
   if (r.kind === 'pir') return r.detected ? 'Hareket var' : 'Sakin';
   if (r.kind === 'window') return r.open ? 'Açık' : 'Kapalı';
   if (r.kind === 'camera') return `${Math.round(r.value)} kişi`;
-  const decimals = r.kind === 'temperature' || r.kind === 'humidity' ? 1 : 0;
+  const decimals =
+    r.kind === 'energy'
+      ? 2
+      : r.kind === 'temperature' || r.kind === 'humidity' || r.kind === 'power'
+        ? 1
+        : 0;
   const val = r.value.toFixed(decimals);
   const unit = r.unit ? ` ${r.unit}` : '';
   return `${val}${unit}`;
@@ -33,6 +38,9 @@ export function SensorCard({ label, reading, icon, accent = colors.accent, size 
       <Text style={[styles.value, stale && styles.stale]} numberOfLines={1}>
         {formatReading(reading)}
       </Text>
+      {reading?.kind === 'energy' && typeof reading.today === 'number' ? (
+        <Text style={styles.subtitle}>Bugün: {reading.today.toFixed(2)} kWh</Text>
+      ) : null}
       {reading?.sim ? <Text style={styles.simBadge}>SİMÜLE</Text> : null}
     </View>
   );
@@ -69,6 +77,11 @@ const styles = StyleSheet.create({
   },
   stale: {
     color: colors.muted,
+  },
+  subtitle: {
+    ...typography.caption,
+    color: colors.muted,
+    marginTop: spacing.xs,
   },
   simBadge: {
     ...typography.micro,

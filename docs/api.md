@@ -10,6 +10,28 @@ http://<server-ip>:5000
 
 `YOLO_TLS_CERT` + `YOLO_TLS_KEY` env degiskenleri set ise HTTPS, aksi halde duz HTTP.
 
+## HTTPS (TLS) kurulumu
+
+Duz HTTP'de API key + tum goruntuler agda acik gider. Paylasimli WiFi veya
+internete acik deploy'da TLS sart.
+
+1. **Cert uret** (sunucu IP'siyle):
+   ```
+   bash server/mosquitto/gen-certs.sh 192.168.1.10
+   ```
+   → `server/mosquitto/certs/{ca.crt, server.crt, server.key}`
+2. **Server:** `server/ai-processing/.env` icindeki `YOLO_TLS_CERT` /
+   `YOLO_TLS_KEY` satirlarini uncomment + path'leri duzelt, sonra restart.
+   Log `https://0.0.0.0:5000` yazmali. Test: `curl -k https://<IP>:5000/`
+3. **ESP32-CAM:** WiFiManager portal / MQTT config'te `server_url`'i
+   `https://<IP>:5000/analyze` yap.
+4. **CA pinning (onerilen):** `firmware/secrets.h` icindeki `YOLO_CA_CERT`'e
+   `ca.crt` iceriligini yapistir + reflash. Bos birakirsan firmware
+   `setInsecure()` kullanir (sifreler ama MITM korumasiz).
+
+> **Cert omru:** self-signed 1 yil (`gen-certs.sh` DAYS=365). Suresi dolunca
+> hem server cert'i hem firmware'deki CA yenilenir → **cihazlar reflash gerekir.**
+
 ## Kimlik Dogrulama
 
 API key ile. Iki yontemden biri:

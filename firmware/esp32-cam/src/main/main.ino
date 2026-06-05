@@ -404,7 +404,7 @@ void setupWiFi() {
   char serverDefault[80];
   snprintf(serverDefault, sizeof(serverDefault), "%s", SERVER_URL);
 
-  WiFiManagerParameter p_serverUrl("server_url", "AI Server URL (http://IP:5000/analyze)",
+  WiFiManagerParameter p_serverUrl("server_url", "AI Server URL (https://IP:5000/analyze)",
                                     serverDefault, 79);
   WiFiManagerParameter p_classroomId("classroom_id", "Sinif ID (sinif-1, sinif-2...)",
                                       CLASSROOM_ID, 19);
@@ -481,8 +481,21 @@ bool sendImageToServer(camera_fb_t *fb) {
     return false;
   }
   
+  // SERVER_URL https:// ise TLS; degilse geriye donuk duz HTTP (kademeli gecis).
+  bool useTls = String(SERVER_URL).startsWith("https://");
   HTTPClient http;
-  http.begin(SERVER_URL);
+  WiFiClientSecure secureClient;
+  if (useTls) {
+    if (strlen(YOLO_CA_CERT) > 0) {
+      secureClient.setCACert(YOLO_CA_CERT);   // CA pinning — sniff + MITM korur
+    } else {
+      secureClient.setInsecure();             // CA yok: sadece sifrele, MITM acik
+      Serial.println("[TLS] UYARI: YOLO_CA_CERT bos — setInsecure, MITM korumasiz");
+    }
+    http.begin(secureClient, SERVER_URL);
+  } else {
+    http.begin(SERVER_URL);
+  }
   http.addHeader("Content-Type", "image/jpeg");
   http.addHeader("X-Classroom-ID", CLASSROOM_ID);
   if (strlen(API_KEY) > 0) {

@@ -12,6 +12,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), [Semantic Vers
 
 (degisiklik yok)
 
+## [2.2.0] - 2026-06-05
+
+### Added
+
+- **Kümülatif enerji izleme (kWh)** — Simulator/PLC `power` (W) ve `current`
+  yayınlarını Node-RED zaman üzerinden entegre edip
+  `akilli-sinif/{id}/sensors/energy` topic'ine **retained** yazar (`value` =
+  ömür boyu toplam, `today` = bugünkü tüketim). Kaynak InfluxDB `energy`
+  measurement (`total_kwh`, `today_kwh`). Mobil uygulama `current`/`power`/`energy`
+  sensör türlerini, Grafana paneli toplam/günlük kWh'i gösterir.
+- **ESP32-CAM TLS yükleme (CAM v1.2.0)** — YOLO sunucusuna görüntü gönderimi
+  `https://` destekler; `YOLO_CA_CERT` varsa CA pinning, yoksa `setInsecure`
+  (şifreli ama MITM açık, uyarı loglanır). `http://` ile geriye dönük uyumlu.
+
+### Fixed
+
+- **TFT haftalık plan yanlış günü vurguluyordu (PLC v1.3.7)** — vurgulama dizi
+  indeksini (`tm_wday - 1`, 0=Pzt varsayımı) kullanıyordu; `schedule.json` hafta
+  sırası farklı olunca (ör. Sal..Cmt) Cuma günü yanlışlıkla Cmt sütununu
+  vurguluyordu. Artık gün **adına** göre eşleşir, veri sırasından bağımsız.
+- **Mobil aktüatör parse'ı** — firmware `status/led {brightness}` ve control echo
+  `{value}` formatlarının ikisini de kabul eder (önceden `brightness` düşüyordu).
+
+### Changed
+
+- **Akım sensörü op-amp dokümantasyonu** — LM358 → MCP6002 (rail-to-rail);
+  README, `docs/donanim.md` ve şemalarda düzeltildi.
+- `docs/mqtt-topics.md` (enerji topic'i) ve `docs/api.md` güncellendi.
+
 ## [2.1.6] - 2026-06-03
 
 ### Fixed
@@ -19,7 +48,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), [Semantic Vers
 - **PLC akim olcumu kalibrasyonu (PLC v1.3.6)** — `rawToAmps` placeholder
   piecewise-linear sabitleri (`CAL_*`, sahada olculmemis) ~1:1 voltaj→akim
   orani veriyordu (1.8V girisinde ~2A okuyordu). Donanim tasarimina gore
-  (shunt + LM358, `1.5A → 3.0V`) oran-tabanli tek lineer fit ile degistirildi:
+  (shunt + MCP6002, `1.5A → 3.0V`) oran-tabanli tek lineer fit ile degistirildi:
   `A = pinVolt × AMPS_PER_VOLT` (`AMPS_PER_VOLT = 1.5/3.0 = 0.5 A/V`).
   Kalibrasyon noktasi (`CAL_AMPS`/`CAL_VOLTS`) koda acikca yazildi. Artik
   3.0V → 1.5A, 1.8V → 0.9A, 0V → 0A.

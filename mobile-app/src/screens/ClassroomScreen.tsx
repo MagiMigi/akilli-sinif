@@ -38,6 +38,13 @@ export function ClassroomScreen({ navigation, route }: Props) {
         .filter((v): v is number => typeof v === 'number'),
     [classroom?.history.camera]
   );
+  const powerHistory = useMemo(
+    () =>
+      ((classroom?.history.power ?? []) as SensorReading[])
+        .map((r) => r.value)
+        .filter((v): v is number => typeof v === 'number'),
+    [classroom?.history.power]
+  );
 
   if (!classroom) {
     return (
@@ -107,6 +114,25 @@ export function ClassroomScreen({ navigation, route }: Props) {
           reading={classroom.sensors.window as AnyReading | undefined}
         />
       </View>
+      <View style={styles.grid}>
+        <SensorCard
+          label="Akım"
+          icon="🔌"
+          reading={classroom.sensors.current as AnyReading | undefined}
+        />
+        <SensorCard
+          label="Güç"
+          icon="⚡"
+          reading={classroom.sensors.power as AnyReading | undefined}
+        />
+      </View>
+      <View style={styles.grid}>
+        <SensorCard
+          label="Toplam Enerji"
+          icon="🔋"
+          reading={classroom.sensors.energy as AnyReading | undefined}
+        />
+      </View>
 
       <LineChart
         title="Sıcaklık (son 120 örnek)"
@@ -127,6 +153,13 @@ export function ClassroomScreen({ navigation, route }: Props) {
         data={personHistory}
         unit="kişi"
         color={colors.warning}
+      />
+
+      <LineChart
+        title="Güç (son 120 örnek)"
+        data={powerHistory}
+        unit="W"
+        color={colors.danger}
       />
 
       <View style={styles.actuators}>

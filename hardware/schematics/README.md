@@ -7,7 +7,7 @@ Bu klasor donanim semalarinin git'te tutuldugu yerdir.
 KiCad (`.kicad_sch`, `.kicad_pcb`, `.kicad_pro`) dosyalari **henuz uretilmedi**. Tum donanim tasarimi metin/ASCII referansi olarak [`../../docs/donanim.md`](../../docs/donanim.md) icinde tutuluyor:
 
 - Pin atamalari (GPIO tablosu)
-- Akim olcumu (0.1ohm shunt + LM358 inverting amplifier, G=-20x)
+- Akim olcumu (0.1ohm shunt + MCP6002 inverting amplifier, G=-20x)
 - Role suruculeri (BC337 + JRC-19F 5V + 1N4007 flyback)
 - LED strip suruculeri (PC817 + IRLZ44N MOSFET, indikator LED paraleli)
 - 12V hat korumasi (1.5A sigorta + 15V TVS)

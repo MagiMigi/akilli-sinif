@@ -41,6 +41,17 @@ export function wireMqttToStore(): void {
         if (ota) store.setOta(classroomId, ota);
         return;
       }
+      // Firmware role/LED durumunu status/* altinda (retained) yayar
+      if (subTopic === 'cooling' || subTopic === 'heating') {
+        const relay = parseRelayPayload(payload);
+        if (relay) store.setRelay(classroomId, subTopic, relay);
+        return;
+      }
+      if (subTopic === 'led') {
+        const act = parseActuatorPayload(payload);
+        if (act) store.setActuator(classroomId, 'led', act);
+        return;
+      }
     }
 
     if (category === 'actuators') {

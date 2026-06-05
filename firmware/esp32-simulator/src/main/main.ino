@@ -88,6 +88,9 @@ const unsigned long MQTT_RECONNECT_INT = 5000;
 // simTime: dakika cinsinden "sanal saat" (1 gerçek sn = 1 sanal dk)
 unsigned long simTime = 480;  // 08:00'den başla
 
+// 12V besleme gerilimi (PLC ile aynı kabul) — guc = V * akim
+const float SUPPLY_VOLTAGE = 12.0f;
+
 struct SimData {
   float temperature;
   float humidity;
@@ -99,6 +102,8 @@ struct SimData {
   int   ledBrightness;
   bool  coolingOn;
   bool  heatingOn;
+  float currentMa;     // simule akim (mA)
+  float powerWatts;    // simule guc (W)
 };
 
 SimData sim;
@@ -167,6 +172,21 @@ void updateSimulation() {
   // Automation: Heating histeresis (PLC ile aynı: 20 ON / 22 OFF)
   if (sim.temperature < 20.0f)      sim.heatingOn = true;
   else if (sim.temperature > 22.0f) sim.heatingOn = false;
+
+  // Guc tuketimi: calisan cihazlarin toplam yuku (gercekci simulasyon).
+  // PLC akimi shunt'tan olcer; SIM ayni fiziksel modeli yazilimda kurar:
+  //   - baz yuk (kontrolcu + role bobinleri)
+  //   - LED parlaklik ile orantili
+  //   - sogutma fani ve isitici sabit yukler
+  float watts = 0.6f;                            // baz yuk
+  watts += (sim.ledBrightness / 100.0f) * 3.0f;  // LED tam parlaklikta ~3W
+  if (sim.coolingOn) watts += 6.0f;              // sogutma fani ~6W
+  if (sim.heatingOn) watts += 10.0f;             // isitici ~10W
+  watts += (random(-20, 21)) / 100.0f;           // ±0.2W olcum gurultusu
+  if (watts < 0.0f) watts = 0.0f;
+
+  sim.powerWatts = watts;
+  sim.currentMa  = (watts / SUPPLY_VOLTAGE) * 1000.0f;  // I = P / V (mA)
 }
 
 // ============================================
@@ -225,10 +245,19 @@ void publishSensorData() {
   d["state"] = sim.heatingOn ? "on" : "off"; d["sim"] = true;
   publishJson(buildTopic("actuators", "heating"), d);
 
-  Serial.printf("[SIM] %02d:%02d | %.1fC | %.0f%% | %dlux | %dppm | %dkisi\n",
+  d.clear();
+  d["value"] = sim.currentMa; d["unit"] = "mA"; d["sim"] = true;
+  publishJson(buildTopic("sensors", "current"), d);
+
+  d.clear();
+  d["value"] = sim.powerWatts; d["unit"] = "W"; d["sim"] = true;
+  publishJson(buildTopic("sensors", "power"), d);
+
+  Serial.printf("[SIM] %02d:%02d | %.1fC | %.0f%% | %dlux | %dppm | %dkisi | %.1fW\n",
                 (int)(simTime / 60), (int)(simTime % 60),
                 sim.temperature, sim.humidity,
-                sim.lightLevel, sim.airQuality, sim.personCount);
+                sim.lightLevel, sim.airQuality, sim.personCount,
+                sim.powerWatts);
 }
 
 void publishStatus(const char* status) {

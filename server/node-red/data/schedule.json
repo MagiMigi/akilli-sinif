@@ -1,79 +1,83 @@
 {
   "classroom_id": "sinif-1",
   "teachers": {
-    "AY": "Pr. Dr. Ali Yilmaz",
-    "MD": "Dr. Mehmet Demir",
-    "ZK": "Ogretmen Zeynep Kaya",
-    "EO": "Pr. Emre Ozturk",
-    "FS": "Dr. Fatma Sahin"
+    "ZNS": "Zeynep Nur Saygin",
+    "CD": "Cenk Dincbakir",
+    "RD": "Recep Duranay",
+    "YES": "Yunus Emre Seyyar"
   },
   "subjects": {
-    "MAT": "Matematik",
-    "FIZ": "Fizik",
-    "KIM": "Kimya",
-    "BIY": "Biyoloji",
-    "TAR": "Tarih",
-    "COG": "Cografya",
-    "ING": "Ingilizce",
-    "TUR": "Turkce",
-    "EDB": "Edebiyat",
-    "BED": "Beden",
-    "MUZ": "Muzik"
+    "BIL": "Bilim Tarihi",
+    "MLT": "Muh.Lab.Tek",
+    "HMG": "Hesap.Muh.",
+    "SKI": "Sehir Kultur",
+    "SGG": "Siber Guv.",
+    "BPR": "Bitirme Proj"
   },
   "week": [
     {
-      "day": "Pzt",
-      "slots": [
-        {"start": "09:00", "end": "09:40", "code": "MAT", "teacher": "AY"},
-        {"start": "09:50", "end": "10:30", "code": "MAT", "teacher": "AY"},
-        {"start": "10:40", "end": "11:20", "code": "TUR", "teacher": "ZK"},
-        {"start": "11:30", "end": "12:10", "code": "FIZ", "teacher": "MD"},
-        {"start": "13:00", "end": "13:40", "code": "ING", "teacher": "EO"},
-        {"start": "13:50", "end": "14:30", "code": "TAR", "teacher": "FS"}
-      ]
-    },
-    {
       "day": "Sal",
       "slots": [
-        {"start": "09:00", "end": "09:40", "code": "FIZ", "teacher": "MD"},
-        {"start": "09:50", "end": "10:30", "code": "FIZ", "teacher": "MD"},
-        {"start": "10:40", "end": "11:20", "code": "BIY", "teacher": "FS"},
-        {"start": "11:30", "end": "12:10", "code": "KIM", "teacher": "MD"},
-        {"start": "13:00", "end": "13:40", "code": "MAT", "teacher": "AY"},
-        {"start": "13:50", "end": "14:30", "code": "BED", "teacher": "EO"}
+        {"start": "09:00", "end": "10:00", "code": "BIL", "teacher": "ZNS"},
+        {"start": "10:00", "end": "11:00", "code": "SKI", "teacher": "ZNS"},
+        {"start": "11:00", "end": "12:00", "code": "SKI", "teacher": "ZNS"},
+        {"start": "12:00", "end": "13:00", "code": "HMG", "teacher": "RD"},
+        {"start": "13:00", "end": "14:00", "code": "MLT", "teacher": "CD"},
+        {"start": "14:00", "end": "15:00", "code": "MLT", "teacher": "CD"},
+        {"start": "15:00", "end": "16:00", "code": "SGG", "teacher": "YES"},
+        {"start": "16:00", "end": "17:00", "code": "BPR", "teacher": "CD"}
       ]
     },
     {
       "day": "Car",
       "slots": [
-        {"start": "09:00", "end": "09:40", "code": "TAR", "teacher": "FS"},
-        {"start": "09:50", "end": "10:30", "code": "TAR", "teacher": "FS"},
-        {"start": "10:40", "end": "11:20", "code": "MAT", "teacher": "AY"},
-        {"start": "11:30", "end": "12:10", "code": "ING", "teacher": "EO"},
-        {"start": "13:00", "end": "13:40", "code": "EDB", "teacher": "ZK"},
-        {"start": "13:50", "end": "14:30", "code": "MUZ", "teacher": "ZK"}
+        {"start": "09:00", "end": "10:00", "code": "MLT", "teacher": "CD"},
+        {"start": "10:00", "end": "11:00", "code": "HMG", "teacher": "RD"},
+        {"start": "11:00", "end": "12:00", "code": "BIL", "teacher": "ZNS"},
+        {"start": "12:00", "end": "13:00", "code": "BIL", "teacher": "ZNS"},
+        {"start": "13:00", "end": "14:00", "code": "SKI", "teacher": "ZNS"},
+        {"start": "14:00", "end": "15:00", "code": "SGG", "teacher": "YES"},
+        {"start": "15:00", "end": "16:00", "code": "SGG", "teacher": "YES"},
+        {"start": "16:00", "end": "17:00", "code": "BPR", "teacher": "CD"}
       ]
     },
     {
       "day": "Per",
       "slots": [
-        {"start": "09:00", "end": "09:40", "code": "KIM", "teacher": "MD"},
-        {"start": "09:50", "end": "10:30", "code": "KIM", "teacher": "MD"},
-        {"start": "10:40", "end": "11:20", "code": "FIZ", "teacher": "MD"},
-        {"start": "11:30", "end": "12:10", "code": "TUR", "teacher": "ZK"},
-        {"start": "13:00", "end": "13:40", "code": "COG", "teacher": "FS"},
-        {"start": "13:50", "end": "14:30", "code": "ING", "teacher": "EO"}
+        {"start": "09:00", "end": "10:00", "code": "SKI", "teacher": "ZNS"},
+        {"start": "10:00", "end": "11:00", "code": "BIL", "teacher": "ZNS"},
+        {"start": "11:00", "end": "12:00", "code": "HMG", "teacher": "RD"},
+        {"start": "12:00", "end": "13:00", "code": "HMG", "teacher": "RD"},
+        {"start": "13:00", "end": "14:00", "code": "MLT", "teacher": "CD"},
+        {"start": "14:00", "end": "15:00", "code": "BPR", "teacher": "CD"},
+        {"start": "15:00", "end": "16:00", "code": "SGG", "teacher": "YES"},
+        {"start": "16:00", "end": "17:00", "code": "BIL", "teacher": "ZNS"}
       ]
     },
     {
       "day": "Cum",
       "slots": [
-        {"start": "09:00", "end": "09:40", "code": "ING", "teacher": "EO"},
-        {"start": "09:50", "end": "10:30", "code": "EDB", "teacher": "ZK"},
-        {"start": "10:40", "end": "11:20", "code": "BIY", "teacher": "FS"},
-        {"start": "11:30", "end": "12:10", "code": "MAT", "teacher": "AY"},
-        {"start": "13:00", "end": "13:40", "code": "BED", "teacher": "EO"},
-        {"start": "13:50", "end": "14:30", "code": "MAT", "teacher": "AY"}
+        {"start": "09:00", "end": "10:00", "code": "SGG", "teacher": "YES"},
+        {"start": "10:00", "end": "11:00", "code": "MLT", "teacher": "CD"},
+        {"start": "11:00", "end": "12:00", "code": "BIL", "teacher": "ZNS"},
+        {"start": "12:00", "end": "13:00", "code": "SKI", "teacher": "ZNS"},
+        {"start": "13:00", "end": "14:00", "code": "HMG", "teacher": "RD"},
+        {"start": "14:00", "end": "15:00", "code": "HMG", "teacher": "RD"},
+        {"start": "15:00", "end": "16:00", "code": "BPR", "teacher": "CD"},
+        {"start": "16:00", "end": "17:00", "code": "MLT", "teacher": "CD"}
+      ]
+    },
+    {
+      "day": "Cmt",
+      "slots": [
+        {"start": "09:00", "end": "10:00", "code": "HMG", "teacher": "RD"},
+        {"start": "10:00", "end": "11:00", "code": "MLT", "teacher": "CD"},
+        {"start": "11:00", "end": "12:00", "code": "BIL", "teacher": "ZNS"},
+        {"start": "12:00", "end": "13:00", "code": "SKI", "teacher": "ZNS"},
+        {"start": "13:00", "end": "14:00", "code": "SGG", "teacher": "YES"},
+        {"start": "14:00", "end": "15:00", "code": "BPR", "teacher": "CD"},
+        {"start": "15:00", "end": "16:00", "code": "HMG", "teacher": "RD"},
+        {"start": "16:00", "end": "17:00", "code": "MLT", "teacher": "CD"}
       ]
     }
   ]

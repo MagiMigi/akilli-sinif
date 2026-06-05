@@ -82,7 +82,8 @@
             [
                 "process-sensor",
                 "debug-sensor",
-                "automation-router"
+                "automation-router",
+                "energy-accumulator"
             ]
         ]
     },
@@ -108,7 +109,7 @@
         "type": "function",
         "z": "akilli-sinif-flow",
         "name": "InfluxDB Format",
-        "func": "// Topic: akilli-sinif/sinif-1/sensors/temperature\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];  // sinif-1\nvar sensorType = parts[3];   // temperature, humidity, camera, etc.\n\n// Sensör tipine göre field adını belirle\nvar fieldName = \"value\";\nvar fieldValue = msg.payload.value;\n\n// Boolean sensörler için özel işlem\nif (sensorType === \"pir\") {\n    fieldName = \"detected\";\n    fieldValue = msg.payload.detected ? 1 : 0;\n} else if (sensorType === \"window\") {\n    fieldName = \"open\";\n    fieldValue = msg.payload.open ? 1 : 0;\n} else if (sensorType === \"camera\") {\n    fieldName = \"person_count\";\n    fieldValue = msg.payload.person_count || 0;\n}\n\n// InfluxDB v2 için mesajı hazırla\nmsg.measurement = sensorType;\nvar fields = {};\nfields[fieldName] = fieldValue;\n\n// Akim sensoru icin ham ADC degerini de kaydet (kalibrasyon icin)\nif (sensorType === \"current\" && msg.payload.raw !== undefined) {\n    fields.raw = msg.payload.raw;\n}\n\nvar tags = {\n    classroom: classroomId,\n    sensor: sensorType\n};\nmsg.payload = [fields, tags];\n\nreturn msg;",
+        "func": "// Topic: akilli-sinif/sinif-1/sensors/temperature\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];  // sinif-1\nvar sensorType = parts[3];   // temperature, humidity, camera, etc.\n\n// Enerji measurement'i akümülatör yazar; geri besleme döngüsünü engelle\nif (sensorType === \"energy\") return null;\n\n// Sensör tipine göre field adını belirle\nvar fieldName = \"value\";\nvar fieldValue = msg.payload.value;\n\n// Boolean sensörler için özel işlem\nif (sensorType === \"pir\") {\n    fieldName = \"detected\";\n    fieldValue = msg.payload.detected ? 1 : 0;\n} else if (sensorType === \"window\") {\n    fieldName = \"open\";\n    fieldValue = msg.payload.open ? 1 : 0;\n} else if (sensorType === \"camera\") {\n    fieldName = \"person_count\";\n    fieldValue = msg.payload.person_count || 0;\n}\n\n// InfluxDB v2 için mesajı hazırla\nmsg.measurement = sensorType;\nvar fields = {};\nfields[fieldName] = fieldValue;\n\n// Akim sensoru icin ham ADC degerini de kaydet (kalibrasyon icin)\nif (sensorType === \"current\" && msg.payload.raw !== undefined) {\n    fields.raw = msg.payload.raw;\n}\n\nvar tags = {\n    classroom: classroomId,\n    sensor: sensorType\n};\nmsg.payload = [fields, tags];\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -140,6 +141,119 @@
         "x": 560,
         "y": 120,
         "wires": []
+    },
+    {
+        "id": "comment-energy",
+        "type": "comment",
+        "z": "akilli-sinif-flow",
+        "name": "⚡ Kümülatif Enerji (kWh) Sayacı",
+        "info": "Anlik power (W) akisindan kWh biriktirir. InfluxDB 'energy' measurement (total_kwh, today_kwh) + retained MQTT sensors/energy (mobil icin). Tek dogruluk kaynagi.",
+        "x": 180,
+        "y": 960,
+        "wires": []
+    },
+    {
+        "id": "energy-accumulator",
+        "type": "function",
+        "z": "akilli-sinif-flow",
+        "name": "Enerji Akümülatör (kWh)",
+        "func": "// Sadece power mesajlarini enerjiye cevir\nvar parts = msg.topic.split('/');\nvar classroomId = parts[1];\nvar sensorType = parts[3];\nif (sensorType !== 'power') return null;\n\n// Seed (InfluxDB'den yukleme) bitene kadar bekle; yoksa restart'ta 0 yazip sayaci sifirlariz\nif (global.get('energy_seeded') !== true) return null;\n\nvar P = msg.payload.value;  // Watt\nif (typeof P !== 'number' || isNaN(P)) return null;\nif (P < 0) P = 0;\n\nvar now = Date.now();\nvar kTotal = classroomId + '_energy_total';\nvar kToday = classroomId + '_energy_today';\nvar kLast  = classroomId + '_energy_lastTs';\nvar kDay   = classroomId + '_energy_dayKey';\n\nvar total = global.get(kTotal); if (typeof total !== 'number') total = 0;\nvar today = global.get(kToday); if (typeof today !== 'number') today = 0;\nvar lastTs = global.get(kLast);\nvar dayKey = global.get(kDay);\n\n// Gunluk reset (yerel tarih degisince)\nvar d = new Date();\nvar curDay = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();\nif (dayKey !== curDay) { today = 0; global.set(kDay, curDay); }\n\n// Entegrasyon: yalnizca makul araliklarda (downtime/ilk ornek atla)\nif (typeof lastTs === 'number') {\n    var dtMs = now - lastTs;\n    if (dtMs > 0 && dtMs <= 60000) {\n        var dKwh = (P / 1000) * (dtMs / 3600000);\n        total += dKwh;\n        today += dKwh;\n    }\n}\nglobal.set(kLast, now);\nglobal.set(kTotal, total);\nglobal.set(kToday, today);\n\nnode.status({ fill: 'green', shape: 'dot', text: classroomId + ': ' + total.toFixed(3) + ' kWh' });\n\n// Cikis 1: InfluxDB (mevcut influxdb-write [fields, tags] formati)\nvar influxMsg = {\n    measurement: 'energy',\n    payload: [ { total_kwh: total, today_kwh: today }, { classroom: classroomId } ]\n};\n\n// Cikis 2: retained MQTT (mobil icin)\nvar pub = { value: Number(total.toFixed(4)), today: Number(today.toFixed(4)), unit: 'kWh', timestamp: now };\nif (msg.payload.sim) pub.sim = true;\nvar mqttMsg = { topic: 'akilli-sinif/' + classroomId + '/sensors/energy', retain: true, payload: pub };\n\nreturn [influxMsg, mqttMsg];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1000,
+        "wires": [
+            [
+                "influxdb-write"
+            ],
+            [
+                "mqtt-energy-pub"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-energy-pub",
+        "type": "mqtt out",
+        "z": "akilli-sinif-flow",
+        "name": "Enerji Yayını (retained)",
+        "topic": "",
+        "qos": "0",
+        "retain": "true",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "mqtt-broker-config",
+        "x": 680,
+        "y": 1000,
+        "wires": []
+    },
+    {
+        "id": "energy-seed-trigger",
+        "type": "inject",
+        "z": "akilli-sinif-flow",
+        "name": "Başlangıçta seed",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "8",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 1060,
+        "wires": [
+            [
+                "energy-seed-query"
+            ]
+        ]
+    },
+    {
+        "id": "energy-seed-query",
+        "type": "influxdb in",
+        "z": "akilli-sinif-flow",
+        "influxdb": "influxdb-config",
+        "name": "Son total_kwh (seed)",
+        "query": "from(bucket: \"sinif_data\")\n  |> range(start: -180d)\n  |> filter(fn: (r) => r._measurement == \"energy\")\n  |> filter(fn: (r) => r._field == \"total_kwh\")\n  |> group(columns: [\"classroom\"])\n  |> last()",
+        "rawOutput": false,
+        "precision": "",
+        "retentionPolicy": "",
+        "org": "AkilliSinif",
+        "x": 390,
+        "y": 1060,
+        "wires": [
+            [
+                "energy-seed"
+            ]
+        ]
+    },
+    {
+        "id": "energy-seed",
+        "type": "function",
+        "z": "akilli-sinif-flow",
+        "name": "Global Context'e Yükle",
+        "func": "// Node-RED restart sonrasi sayaci InfluxDB'den geri yukle\nvar rows = msg.payload || [];\nvar n = 0;\nrows.forEach(function (r) {\n    var id = r.classroom;\n    var v = r._value;\n    if (id && typeof v === 'number') {\n        global.set(id + '_energy_total', v);\n        n++;\n    }\n});\n// Bayragi her durumda kaldir (bos sonuc = ilk kurulum; accumulator 0'dan baslar)\nglobal.set('energy_seeded', true);\nnode.status({ fill: 'blue', shape: 'dot', text: 'seed ok (' + n + ' sinif)' });\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 660,
+        "y": 1060,
+        "wires": [
+            []
+        ]
     },
     {
         "id": "mqtt-status",

@@ -5,7 +5,10 @@ export type SensorKind =
   | 'air_quality'
   | 'pir'
   | 'window'
-  | 'camera';
+  | 'camera'
+  | 'current'
+  | 'power'
+  | 'energy';
 
 export type AlertLevel = 'none' | 'info' | 'warning' | 'danger';
 
@@ -16,6 +19,7 @@ export interface SensorReading {
   timestamp: number;
   receivedAt: number;
   sim?: boolean;
+  today?: number; // energy: bugünkü kWh
 }
 
 export interface MotionReading {

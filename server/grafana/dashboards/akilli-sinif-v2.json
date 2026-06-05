@@ -1063,7 +1063,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"led_status\")\n  |> filter(fn: (r) => r._field == \"brightness\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"led_status\")\n  |> filter(fn: (r) => r._field == \"brightness\")\n  |> last()\n  |> group()\n  |> sort(columns: [\"_time\"])\n  |> last()",
           "refId": "A"
         }
       ],
@@ -1143,7 +1143,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"cooling_status\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"cooling_status\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()\n  |> group()\n  |> sort(columns: [\"_time\"])\n  |> last()",
           "refId": "A"
         }
       ],
@@ -1223,94 +1223,11 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"heating_status\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()",
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"heating_status\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()\n  |> group()\n  |> sort(columns: [\"_time\"])\n  |> last()",
           "refId": "A"
         }
       ],
       "title": "🔥 Heating (Isıtma)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "ffgfokah0gqv4c"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "auto_light": {
-                  "color": "green",
-                  "index": 0,
-                  "text": "Işık Oto"
-                },
-                "auto_temp": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "Sıcaklık Oto"
-                },
-                "auto_empty": {
-                  "color": "orange",
-                  "index": 2,
-                  "text": "Sınıf Boş"
-                },
-                "manual": {
-                  "color": "blue",
-                  "index": 3,
-                  "text": "Manuel"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 12,
-        "y": 32
-      },
-      "id": 24,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "ffgfokah0gqv4c"
-          },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"automation_event\")\n  |> filter(fn: (r) => r._field == \"reason\")\n  |> last()",
-          "refId": "A"
-        }
-      ],
-      "title": "🤖 Son Otomasyon",
       "type": "stat"
     },
     {
@@ -2225,6 +2142,123 @@
       ],
       "title": "📈 Akım & Güç Trendi",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "ffgfokah0gqv4c"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kwatth",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 61
+      },
+      "id": 55,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "ffgfokah0gqv4c"
+          },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: 0)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"energy\")\n  |> filter(fn: (r) => r._field == \"total_kwh\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "⚡ Toplam Tüketim (kWh)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "ffgfokah0gqv4c"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1
+          },
+          "mappings": [],
+          "unit": "kwatth",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 61
+      },
+      "id": 56,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "ffgfokah0gqv4c"
+          },
+          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"energy\")\n  |> filter(fn: (r) => r._field == \"total_kwh\")\n  |> aggregateWindow(every: 1d, fn: last, createEmpty: false)\n  |> difference()",
+          "refId": "A"
+        }
+      ],
+      "title": "📊 Günlük Tüketim (kWh)",
+      "type": "barchart"
     }
   ],
   "refresh": "5s",

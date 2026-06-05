@@ -33,12 +33,14 @@ PLC ve Simulator firmware'i tarafindan yayinlanir. Kategori: `sensors`.
 | `akilli-sinif/{id}/sensors/pir` | Hareket algilama (PIR) | `{"detected": true, "timestamp": 123456}` |
 | `akilli-sinif/{id}/sensors/window` | Pencere durumu (Reed Switch) | `{"open": false, "timestamp": 123456}` |
 | `akilli-sinif/{id}/sensors/camera` | Kisi sayisi (YOLO sonucu) | `{"person_count": 15, "timestamp": 123456}` |
+| `akilli-sinif/{id}/sensors/energy` | Kumulatif enerji (kWh) — **retained** | `{"value": 12.345, "today": 1.23, "unit": "kWh", "timestamp": 123456}` |
 
 **Notlar:**
 - `timestamp`: `millis()` degeri (ESP32 uptime, ms cinsinden). YOLO sunucusu ise Unix timestamp (ms) kullanir.
 - PIR: `detected: true` = hareket var
 - Window: `open: true` = pencere acik (klima kontrolu icin onemli)
 - Camera topic'ine iki kaynak yazar: YOLO sunucusu (HTTP sonrasi MQTT publish) ve Simulator (dogrudan)
+- `energy`: firmware DEGIL, Node-RED yayinlar. `power` (W) akisini zaman uzerinden entegre eder (kWh). **retained** olarak yayinlanir, boylece mobil baglanir baglanmaz toplami gorur. `value` = omur boyu toplam, `today` = bugunku tuketim. Kaynak: InfluxDB `energy` measurement (`total_kwh`, `today_kwh`).
 
 ### Simulator Ek Alani
 

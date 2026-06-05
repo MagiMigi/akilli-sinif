@@ -91,7 +91,7 @@ const unsigned long RESET_HOLD_MS   = 5000;  // 5 saniye bas
 const int PIN_DHT = 4;           // DHT11 sicaklik/nem sensoru
 const int PIN_LDR = 34;          // Isik sensoru (ADC, input-only)
 const int PIN_MQ135 = 35;        // Hava kalitesi sensoru (ADC, input-only)
-const int PIN_CURRENT = 36;      // LM358 opamp cikisi (ADC1_CH0, VP, input-only)
+const int PIN_CURRENT = 36;      // MCP6002 opamp cikisi (ADC1_CH0, VP, input-only)
 const int PIN_PIR = 27;          // Hareket sensoru
 const int PIN_WINDOW = 26;       // Pencere sensoru (reed switch)
 
@@ -158,7 +158,7 @@ float powerWatts = 0.0f;
 // 12V besleme gerilimi (sabit kabul)
 const float SUPPLY_VOLTAGE = 12.0f;
 
-// Akim olcumu: shunt + LM358 (gain ~20). Donanim tasarimi: 1.5A -> 3.0V ADC.
+// Akim olcumu: shunt + MCP6002 (gain ~20). Donanim tasarimi: 1.5A -> 3.0V ADC.
 // Akim, pin voltaji ile DOGRU ORANTILI -> A = V * AMPS_PER_VOLT.
 // Kalibrasyon noktasi: 1.5 A @ 3.0 V  ->  AMPS_PER_VOLT = 1.5 / 3.0 = 0.5 A/V
 //   ornek: 3.0V -> 1.5A,  1.8V -> 0.9A,  0V -> 0A
@@ -872,11 +872,13 @@ void renderWeek(bool full) {
     return;
   }
 
-  // Bugunun indeksini bul (0=Pzt ... 4=Cum)
-  int todayIdx = -1;
+  // Bugunu GUN ADINA gore esle. Dizi sirasini Pzt=0 varsayma:
+  // week verisi okuldan farkli sirada/gunlerle gelebilir (or. Sal..Cmt).
+  String todayName = "";
   struct tm t;
   if (getLocalTime(&t, 100)) {
-    if (t.tm_wday >= 1 && t.tm_wday <= 5) todayIdx = t.tm_wday - 1;
+    const char* dayNames[7] = {"Paz","Pzt","Sal","Car","Per","Cum","Cmt"};
+    todayName = dayNames[t.tm_wday];
   }
 
   const int cols = 5;
@@ -888,7 +890,9 @@ void renderWeek(bool full) {
   tft.setTextSize(1);
   for (int d = 0; d < weekPlan.dayCount && d < cols; d++) {
     int x = d * colW + 3;
-    if (d == todayIdx) {
+    bool isToday = todayName.length() &&
+                   weekPlan.days[d].day.substring(0, 3).equalsIgnoreCase(todayName);
+    if (isToday) {
       tft.fillRect(d * colW, startY - 1, colW, rowH, COLOR_HEADER);
       tft.setTextColor(COLOR_BG, COLOR_HEADER);
     } else {
@@ -910,8 +914,10 @@ void renderWeek(bool full) {
     int y = startY + rowH + 2 + s * rowH;
     for (int d = 0; d < weekPlan.dayCount && d < cols; d++) {
       int x = d * colW + 3;
+      bool isToday = todayName.length() &&
+                     weekPlan.days[d].day.substring(0, 3).equalsIgnoreCase(todayName);
       tft.setCursor(x, y);
-      tft.setTextColor(d == todayIdx ? COLOR_VALUE : COLOR_TEXT, COLOR_BG);
+      tft.setTextColor(isToday ? COLOR_VALUE : COLOR_TEXT, COLOR_BG);
       if (s < weekPlan.days[d].slotCount) {
         tft.print(weekPlan.days[d].codes[s].substring(0, 3));
       }
@@ -1925,7 +1931,7 @@ void subscribeToControlTopics() {
 // SENSOR FONKSIYONLARI
 // ============================================
 
-// LM358 cikisindaki ham ADC degerini akima (A) cevirir.
+// MCP6002 cikisindaki ham ADC degerini akima (A) cevirir.
 // pin voltaji = raw * Vref/4095, akim = voltaj * AMPS_PER_VOLT (1.5A @ 3V orani).
 float rawToAmps(int raw) {
   float pinVolts = raw * (ADC_VREF / (float)ADC_MAX);
@@ -1970,8 +1976,8 @@ void readRealSensors() {
   int rawAir = analogRead(PIN_MQ135);
   airQuality = map(rawAir, 0, 4095, 0, 500);
 
-  // ========== Shunt + LM358 - Akim ve Guc ==========
-  // 0.1 ohm shunt (low-side), LM358 evirici amp (gain ~20)
+  // ========== Shunt + MCP6002 - Akim ve Guc ==========
+  // 0.1 ohm shunt (low-side), MCP6002 evirici amp (gain ~20)
   // 1.5A -> ~3.0V ADC. Piecewise-linear kalibrasyon ile A'ya cevriliyor.
   // Dusuk sinyalde ADC gurultusu yuksek -> 16 ornek ortalama.
   uint32_t adcSum = 0;
@@ -2026,7 +2032,7 @@ void setupSensors() {
   // LDR ve MQ-135 analog pinler - ayar gerekmez (analogRead otomatik)
   // Ancak ADC cozunurlugunu ayarlayabiliriz
   analogReadResolution(12);  // 12-bit (0-4095)
-  // Akim sensoru (LM358 cikisi) icin 0-3.3V tam aralik. Core 3.x'te default
+  // Akim sensoru (MCP6002 cikisi) icin 0-3.3V tam aralik. Core 3.x'te default
   // attenuation bazi surumlerde degisik geliyor, explicit set garanti.
   analogSetPinAttenuation(PIN_CURRENT, ADC_11db);
   analogSetPinAttenuation(PIN_LDR, ADC_11db);

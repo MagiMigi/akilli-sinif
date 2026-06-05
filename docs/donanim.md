@@ -35,7 +35,7 @@ Kaynak: `firmware/esp32-plc/src/main/main.ino`, `firmware/esp32-cam/src/main/mai
               +-- ESP32-CAM (5V)
               +-- PIR HC-SR501 (VCC)
               +-- MQ-135 (5V: A1/A2/H1)
-              +-- LM358 op-amp (V+ supply)
+              +-- MCP6002 op-amp (V+ supply)
               +-- Cooling rolesi bobini
               +-- Heating rolesi bobini
 
@@ -63,7 +63,7 @@ Indikator LED -> GPIO 13 -> 220-330ohm -> LED -> GND
 | BC337 NPN transistor | 2 | Cooling + heating role surucusu |
 | IRLZ44N MOSFET | 1 | Strip LED surucu (logic-level) |
 | PC817 optocoupler | 1 | Strip LED icin ESP32-12V izolasyonu |
-| LM358 op-amp | 1 | Akim sensoru amplifikatoru (inverting) |
+| MCP6002 op-amp | 1 | Akim sensoru amplifikatoru (inverting) |
 | JRC-19F 5V role | 2 | Cooling + heating |
 
 ### Diyotlar
@@ -98,7 +98,7 @@ Indikator LED -> GPIO 13 -> 220-330ohm -> LED -> GND
 | Bilesen | Adet | Besleme | Aciklama |
 |---------|------|---------|----------|
 | TFT ekran (ST7735 1.44") | 1 | 3.3V | SPI baglanti, 128x128 |
-| Tactile button 6x6mm | 2 | Dahili pull-up | NEXT (GPIO 25) + PREV (GPIO 14) |
+| Tactile button 6x6mm | 2 | Dahili pull-up | NEXT (GPIO 25) |
 
 ### Direncler
 
@@ -112,7 +112,7 @@ Indikator LED -> GPIO 13 -> 220-330ohm -> LED -> GND
 | 1k 1/4W | 4 | Op-amp giris (Rin) + op-amp cikis seri + 2x BC337 base |
 | 10k 1/4W | 3 | LDR pull-down + MQ-135 voltaj bolucu ust + MOSFET gate pull-down |
 | 15k 1/4W | 1 | MQ-135 voltaj bolucu alt |
-| 20k 1/4W | 1 | LM358 feedback (Rf) |
+| 20k 1/4W | 1 | MCP6002 feedback (Rf) |
 
 ### Guc
 
@@ -133,7 +133,7 @@ Indikator LED -> GPIO 13 -> 220-330ohm -> LED -> GND
 | DHT11 DATA | 4 | Dijital | 3-pin modul, harici direnc gerekmez |
 | LDR | 34 | Analog (ADC1) | 10k pull-down ile voltaj bolucu |
 | MQ-135 (B1=B2) | 35 | Analog (ADC1) | 10k+15k voltaj bolucu, max ~3V |
-| LM358 OUT | 36 (VP) | Analog (ADC1_CH0) | 1k seri + 3.3V zener clamp |
+| MCP6002 OUT | 36 (VP) | Analog (ADC1_CH0) | 1k seri + 3.3V zener clamp |
 | PIR OUT | 27 | Dijital | HIGH = hareket var |
 | Reed Switch | 26 | Dijital | INPUT_PULLUP, GND'ye anahtarlanir, HIGH = pencere acik |
 
@@ -142,7 +142,6 @@ Indikator LED -> GPIO 13 -> 220-330ohm -> LED -> GND
 | Bilesen | ESP32 GPIO | Tur | Notlar |
 |---------|------------|-----|--------|
 | Buton NEXT | 25 | INPUT_PULLUP | Aktif LOW, GND'ye |
-| Buton PREV | 14 | INPUT_PULLUP | Aktif LOW, GND'ye |
 | Anahtar LED (duvar) | 5 | INPUT_PULLUP | Push button, aktif LOW, GND'ye. Toggle: bas -> LED on/off |
 | Anahtar COOLING (duvar) | 16 | INPUT_PULLUP | Push button, aktif LOW, GND'ye. Toggle: bas -> cooling on/off |
 | Anahtar HEATING (duvar) | 19 | INPUT_PULLUP | Push button, aktif LOW, GND'ye. Toggle: bas -> heating on/off |
@@ -282,7 +281,7 @@ B1 = B2   ---> 10k ---+--- GPIO 35
 - 1-2 dakika isinma suresi gerektirir
 - Dusuk ADC = temiz hava, yuksek ADC = kirli hava
 
-### 4.4 Akim sensoru — Low-side shunt + LM358 inverting (GPIO 36)
+### 4.4 Akim sensoru — Low-side shunt + MCP6002 inverting (GPIO 36)
 
 12V hatti girisi:
 
@@ -298,7 +297,7 @@ B1 = B2   ---> 10k ---+--- GPIO 35
 ```
 12V (-) GND ---+--- 0.1ohm shunt ---+--- Sistem GND (ESP32, sensorler, vs.)
                |                     |
-               +--- 1k --- LM358 V-  |
+               +--- 1k --- MCP6002 V-  |
                           (eviren)   |
                                      |
                           20k feedback (V- <-> Vout)
@@ -306,7 +305,7 @@ B1 = B2   ---> 10k ---+--- GPIO 35
                           VCC = +5V
                           VEE = sistem GND
 
-LM358 OUT ---> 1k ---+--- GPIO 36 (ADC1_CH0, VP)
+MCP6002 OUT ---> 1k ---+--- GPIO 36 (ADC1_CH0, VP)
                      |
                      +--- Zener 3.3V (katot bu noktada, anot GND)
 ```
@@ -318,7 +317,7 @@ LM358 OUT ---> 1k ---+--- GPIO 36 (ADC1_CH0, VP)
 
 **Calisma prensibi:** Sistem akimi (yukler) sistem GND'den shunt uzerinden 12V GND'ye doner. Shunt uzerinde I*R kadar dusus olusur; 12V GND tarafi sistem GND'ye gore negatife kayar. Eviren amplifikator bu negatif gerilimi pozitif olarak ESP32 ADC'ye verir.
 
-**Yazilim kalibrasyonu:** LM358 single-supply'da rail'lere tam ulasamaz (~0.7V alt, ~3.5V ust); dusuk akimda dogrusal degil. `firmware/esp32-plc/src/main/main.ino` icindeki piecewise-linear kalibrasyon ile bilinen yuk noktalarindan (12V fan, 22ohm heater) interpolasyon yapilir.
+**Yazilim kalibrasyonu:** MCP6002 rail-to-rail CMOS op-amp oldugu icin cikis tek beslemede 0V'a yakin inebilir (MCP6002'in aksine, ~0.7V alt rail siniri yok) -> dusuk akimda olcum daha dogrusal ve sifir akimda cikis sifira yakin. Yine de shunt toleransi, op-amp offset'i ve ADC dogrusalsizligi nedeniyle mutlak dogruluk icin `firmware/esp32-plc/src/main/main.ino` icindeki oran-tabanli lineer kalibrasyon ile bilinen yuk noktalarindan (12V fan, 22ohm heater) hesaplanir.
 
 ### 4.5 PIR HC-SR501 (GPIO 27)
 
@@ -561,7 +560,7 @@ PLC firmware'inin TFT ekraninda gosterilen bilgiler:
 
 ### 10. Akim Sensoru Kalibrasyonu
 
-1. LM358 + shunt + zener clamp devresini kur
+1. MCP6002 + shunt + zener clamp devresini kur
 2. Bilinen yukleri tek tek bagla:
    - Sadece ESP32 + sensorler: ~0.15A baseline
    - + Cooling fan: +0.30A (~0.45A toplam)

@@ -15,6 +15,9 @@ const SENSOR_KINDS: SensorKind[] = [
   'pir',
   'window',
   'camera',
+  'current',
+  'power',
+  'energy',
 ];
 
 export function isSensorKind(name: string): name is SensorKind {
@@ -69,6 +72,7 @@ export function parseSensorPayload(
     timestamp: ts,
     sim,
     receivedAt,
+    today: typeof p.today === 'number' ? p.today : undefined,
   };
 }
 
@@ -121,9 +125,16 @@ export function parseOtaPayload(payload: unknown): OtaStatus | null {
 export function parseActuatorPayload(payload: unknown): ActuatorState | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const p = payload as Record<string, unknown>;
-  if (typeof p.value !== 'number') return null;
+  // Firmware status/led {brightness}, control echo {value} — ikisini de kabul et
+  const value =
+    typeof p.value === 'number'
+      ? p.value
+      : typeof p.brightness === 'number'
+        ? p.brightness
+        : null;
+  if (value === null) return null;
   return {
-    value: p.value,
+    value,
     unit: typeof p.unit === 'string' ? p.unit : undefined,
     timestamp: typeof p.timestamp === 'number' ? p.timestamp : Date.now(),
     receivedAt: Date.now(),

@@ -63,7 +63,7 @@ ESP32-CAM ──┘                    └── YOLOv8 (kişi sayma)
 | IRLZ44N MOSFET | 1 | Strip LED sürücü |
 | BC337 + JRC-19F 5V röle | 2+2 | Soğutma + ısıtma |
 | 1.5A cam sigorta + 15V TVS + 0.1Ω shunt | 1+1+1 | 12V hat koruma + akım ölçüm |
-| LM358 op-amp | 1 | Akım sensörü amplifikatörü |
+| MCP6002 op-amp | 1 | Akım sensörü amplifikatörü (rail-to-rail) |
 
 Devre semalari ve pin haritalari: **[docs/donanim.md](docs/donanim.md)**
 
@@ -250,7 +250,7 @@ Sonraki güncellemeler OTA ile kablosuz yapılır.
 | DHT11 | GPIO4 | Dijital |
 | LDR | GPIO34 | Analog |
 | MQ-135 | GPIO35 | Analog |
-| LM358 (akım) | GPIO36 | Analog (VP) |
+| MCP6002 (akım) | GPIO36 | Analog (VP) |
 | PIR | GPIO27 | Dijital |
 | Reed Switch | GPIO26 | Dijital |
 
