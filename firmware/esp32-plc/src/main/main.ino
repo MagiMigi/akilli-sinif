@@ -676,7 +676,7 @@ void renderHome(bool full) {
 
   tft.setTextColor(COLOR_VALUE, bgColor);
   tft.setCursor(70, 84);
-  snprintf(buf, sizeof(buf), "Dem:%.0f%%", humidity);
+  snprintf(buf, sizeof(buf), "Nem:%.0f%%", humidity);
   tft.print(buf);
 
   // Alt satir: Hava kalitesi (ppm) / Kisi sayisi

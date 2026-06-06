@@ -11,11 +11,18 @@ interface Props {
   size?: 'sm' | 'md';
 }
 
+// Enerji: 1 kWh altinda Wh goster (Grafana kwatth auto-scale ile ayni),
+// yoksa kucuk degerler "0.00 kWh" olarak anlamsiz gorunur.
+function formatEnergy(kwh: number): string {
+  return kwh >= 1 ? `${kwh.toFixed(2)} kWh` : `${(kwh * 1000).toFixed(1)} Wh`;
+}
+
 function formatReading(r: AnyReading | undefined): string {
   if (!r) return '—';
   if (r.kind === 'pir') return r.detected ? 'Hareket var' : 'Sakin';
   if (r.kind === 'window') return r.open ? 'Açık' : 'Kapalı';
   if (r.kind === 'camera') return `${Math.round(r.value)} kişi`;
+  if (r.kind === 'energy') return formatEnergy(r.value);
   const decimals =
     r.kind === 'energy'
       ? 2
@@ -39,7 +46,7 @@ export function SensorCard({ label, reading, icon, accent = colors.accent, size 
         {formatReading(reading)}
       </Text>
       {reading?.kind === 'energy' && typeof reading.today === 'number' ? (
-        <Text style={styles.subtitle}>Bugün: {reading.today.toFixed(2)} kWh</Text>
+        <Text style={styles.subtitle}>Bugün: {formatEnergy(reading.today)}</Text>
       ) : null}
       {reading?.sim ? <Text style={styles.simBadge}>SİMÜLE</Text> : null}
     </View>

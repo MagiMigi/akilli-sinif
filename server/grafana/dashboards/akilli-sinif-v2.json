@@ -2253,7 +2253,7 @@
             "type": "influxdb",
             "uid": "ffgfokah0gqv4c"
           },
-          "query": "from(bucket: \"sinif_data\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"energy\")\n  |> filter(fn: (r) => r._field == \"total_kwh\")\n  |> aggregateWindow(every: 1d, fn: last, createEmpty: false)\n  |> difference()",
+          "query": "import \"timezone\"\noption location = timezone.location(name: \"Europe/Istanbul\")\n\nfrom(bucket: \"sinif_data\")\n  |> range(start: -30d)\n  |> filter(fn: (r) => r.classroom == \"${classroom}\")\n  |> filter(fn: (r) => r._measurement == \"energy\")\n  |> filter(fn: (r) => r._field == \"today_kwh\")\n  |> aggregateWindow(every: 1d, fn: max, createEmpty: false)",
           "refId": "A"
         }
       ],
